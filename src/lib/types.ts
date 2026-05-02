@@ -60,6 +60,10 @@ export interface AppEvent {
   date: string;
   time: string;
   type: 'event' | 'announcement';
+  notify24h?: boolean;
+  notify1h?: boolean;
+  notifyNow?: boolean;
+  readBy?: string[];
   createdBy: string;
   createdAt: string;
 }

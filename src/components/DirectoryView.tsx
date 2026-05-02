@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, User, PawPrint } from 'lucide-react';
+import { Search, User, PawPrint, X } from 'lucide-react';
 
 export function DirectoryView() {
   const { publicProfiles, allPets } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'people' | 'pets'>('all');
+  const [fullscreenImage, setFullscreenImage] = useState<{url: string, title: string} | null>(null);
 
   const filteredProfiles = publicProfiles.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -64,7 +65,10 @@ export function DirectoryView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredProfiles.map(profile => (
                 <div key={profile.uid} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300">
+                  <div 
+                    className={`w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300 ${profile.photoUrl ? 'cursor-pointer hover:opacity-90 active:scale-95 transition-all' : ''}`}
+                    onClick={() => profile.photoUrl && setFullscreenImage({url: profile.photoUrl, title: profile.name})}
+                  >
                     {profile.photoUrl ? (
                       <img src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" />
                     ) : (
@@ -101,7 +105,10 @@ export function DirectoryView() {
                 const owner = publicProfiles.find(p => p.uid === pet.ownerId);
                 return (
                   <div key={pet.id} className="bg-white p-4 rounded-3xl shadow-sm border border-orange-100 flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5">
+                    <div 
+                      className={`w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5 ${pet.photoUrl ? 'cursor-pointer hover:opacity-90 active:scale-95 transition-all' : ''}`}
+                      onClick={() => pet.photoUrl && setFullscreenImage({url: pet.photoUrl, title: pet.name})}
+                    >
                       {pet.photoUrl ? (
                         <img src={pet.photoUrl} alt={pet.name} className="w-full h-full object-cover rounded-full" />
                       ) : (
@@ -127,6 +134,28 @@ export function DirectoryView() {
               Nenhum pet encontrado
             </div>
           )}
+        </div>
+      )}
+
+      {fullscreenImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button 
+            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full transition-colors"
+            onClick={() => setFullscreenImage(null)}
+          >
+            <X size={24} />
+          </button>
+          <div className="max-w-4xl w-full max-h-[90vh] flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
+            <img 
+              src={fullscreenImage.url} 
+              alt={fullscreenImage.title} 
+              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+            />
+            <p className="text-white font-medium bg-black/50 px-4 py-2 rounded-full">{fullscreenImage.title}</p>
+          </div>
         </div>
       )}
     </div>

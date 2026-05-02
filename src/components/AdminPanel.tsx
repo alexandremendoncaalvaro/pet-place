@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification } from '../services/api';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent } from '../services/api';
 import { Payment } from '../lib/types';
 
 export function AdminPanel() {
@@ -89,7 +89,7 @@ export function AdminPanel() {
         </div>
       )}
 
-      {tab === 'comms' && <CommsForm />}
+      {tab === 'comms' && <CommsManager />}
 
       {tab === 'settings' && <SettingsForm />}
 
@@ -110,8 +110,8 @@ function SettingsForm() {
     setLoading(true);
     await updateConfig({ 
       pixKey, 
-      monthlyAmount: parseFloat(monthlyAmount),
-      dueDateDay: parseInt(dueDateDay, 10),
+      monthlyAmount: parseFloat(monthlyAmount) || 0,
+      dueDateDay: parseInt(dueDateDay, 10) || 1,
       paymentInstructions
     });
     setLoading(false);
@@ -242,7 +242,7 @@ function ExpenseForm() {
     setLoading(true);
     await addExpense({
       title,
-      amount: parseFloat(amount),
+      amount: parseFloat(amount) || 0,
       date: format(new Date(), 'yyyy-MM-dd'),
       category: 'Geral',
       createdBy: user?.uid || '',
@@ -305,38 +305,48 @@ function ExpenseForm() {
 function CommsForm() {
   const { user } = useApp();
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState<'event' | 'announcement' | 'notification'>('announcement');
+  const [type, setType] = useState<'event' | 'announcement'>('announcement');
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [notifyNow, setNotifyNow] = useState(true);
+  const [notify24h, setNotify24h] = useState(false);
+  const [notify1h, setNotify1h] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      if (type === 'notification') {
+      await addEvent({
+        title,
+        description: desc,
+        type,
+        date,
+        time,
+        notifyNow: type === 'event' ? notifyNow : true,
+        notify24h: type === 'event' ? notify24h : false,
+        notify1h: type === 'event' ? notify1h : false,
+        readBy: [],
+        createdBy: user?.uid || ''
+      });
+      
+      if ((type === 'event' && notifyNow) || type === 'announcement') {
         await addNotification({
           userId: 'all',
-          title,
+          title: type === 'event' ? `Novo Evento: ${title}` : `Novo Aviso: ${title}`,
           message: desc
         });
-        alert('Notificação enviada a todos!');
-      } else {
-        await addEvent({
-          title,
-          description: desc,
-          type,
-          date: date || undefined,
-          time: time || undefined,
-          createdBy: user?.uid || ''
-        });
-        alert('Aviso/Evento publicado no Mural!');
       }
+
+      alert('Publicado!');
       setTitle('');
       setDesc('');
       setDate('');
       setTime('');
+      setNotifyNow(true);
+      setNotify24h(false);
+      setNotify1h(false);
     } catch(err) {
       alert('Erro ao publicar.');
     } finally {
@@ -357,11 +367,6 @@ function CommsForm() {
           onClick={() => setType('event')} 
           className={`flex-1 py-2 text-xs font-medium rounded-xl select-none ${type === 'event' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
         >Evento</button>
-        <button 
-          type="button" 
-          onClick={() => setType('notification')} 
-          className={`flex-1 py-2 text-xs font-medium rounded-xl select-none ${type === 'notification' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
-        >Notificação</button>
       </div>
 
       <div>
@@ -383,20 +388,40 @@ function CommsForm() {
       </div>
 
       {type === 'event' && (
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Data</label>
-            <input 
-              type="date" value={date} onChange={e => setDate(e.target.value)} required
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Data</label>
+              <input 
+                type="date" value={date} onChange={e => setDate(e.target.value)} required
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Hora (Opcional)</label>
+              <input 
+                type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
+              />
+            </div>
           </div>
-          <div className="flex-1">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Hora (Opcional)</label>
-            <input 
-              type="time" value={time} onChange={e => setTime(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
-            />
+          
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mt-2">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 block">Notificações</label>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={notifyNow} onChange={e => setNotifyNow(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                <span className="text-sm text-gray-700">Notificar agora</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={notify24h} onChange={e => setNotify24h(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                <span className="text-sm text-gray-700">Notificar 24h antes</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={notify1h} onChange={e => setNotify1h(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                <span className="text-sm text-gray-700">Notificar 1h antes</span>
+              </label>
+            </div>
           </div>
         </div>
       )}
@@ -408,5 +433,62 @@ function CommsForm() {
         {loading ? <Loader2 size={18} className="animate-spin" /> : <><Send size={18} className="mr-2" /> Publicar</>}
       </button>
     </form>
+  );
+}
+
+function CommsManager() {
+  const { events, allUsers } = useApp();
+  
+  return (
+    <div className="space-y-6">
+      <CommsForm />
+      
+      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">Mural Recente</h3>
+        <div className="space-y-4">
+          {events.length === 0 ? (
+             <p className="text-sm text-gray-400 italic text-center py-4">Nenhum aviso ou evento publicado.</p>
+          ) : events.map(evt => {
+             const residentCount = allUsers.filter(u => u.role === 'resident').length;
+             const readCount = evt.readBy?.length || 0;
+             const isEvent = evt.type === 'event';
+             return (
+               <div key={evt.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50 flex flex-col gap-2">
+                 <div className="flex justify-between items-start">
+                   <div>
+                     <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${isEvent ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                       {isEvent ? 'Evento' : 'Aviso'}
+                     </span>
+                     <h4 className="text-sm font-semibold text-gray-800 mt-1">{evt.title}</h4>
+                   </div>
+                   <button className="text-gray-400 hover:text-red-500 transition-colors p-1" onClick={async () => {
+                     if (confirm('Excluir este item?')) {
+                       await deleteEvent(evt.id);
+                     }
+                   }}>
+                     <XCircle size={16} />
+                   </button>
+                 </div>
+                 
+                 <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                   {!isEvent && (
+                     <div className="flex items-center gap-1">
+                       <CheckCircle2 size={14} className={readCount === residentCount && residentCount > 0 ? "text-green-500" : "text-gray-400"} />
+                       Lido por {readCount} de {residentCount} moradores
+                     </div>
+                   )}
+                   {isEvent && (
+                     <div className="flex items-center gap-1">
+                       <span>📅 {format(new Date(evt.date + 'T00:00:00'), 'dd/MM/yyyy')}</span>
+                       {evt.time && <span>⏰ {evt.time}</span>}
+                     </div>
+                   )}
+                 </div>
+               </div>
+             );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }

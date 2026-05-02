@@ -598,6 +598,29 @@ export async function deleteEvent(eventId: string) {
   } catch(e) { handleFirestoreError(e); }
 }
 
+export async function markEventAsRead(eventId: string, userId: string) {
+  if (!isRealBackend) {
+    const ev = MOCK_EVENTS.find(e => e.id === eventId);
+    if (ev) {
+      if (!ev.readBy) ev.readBy = [];
+      if (!ev.readBy.includes(userId)) ev.readBy.push(userId);
+    }
+    return;
+  }
+  try {
+    // We would ideally use arrayUnion here.
+    const evRef = doc(db, 'events', eventId);
+    const snap = await getDoc(evRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const readBy = data.readBy || [];
+      if (!readBy.includes(userId)) {
+        await updateDoc(evRef, { readBy: [...readBy, userId] });
+      }
+    }
+  } catch(e) { handleFirestoreError(e); }
+}
+
 export function subscribeToMyNotifications(userId: string, callback: (n: Notification[]) => void) {
   if (!isRealBackend) {
     callback(MOCK_NOTIFICATIONS.filter(n => n.userId === userId || n.userId === 'all'));

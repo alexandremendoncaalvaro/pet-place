@@ -1,12 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Calendar, Bell, Info } from 'lucide-react';
+import { Calendar, Bell, Info, Check } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { markNotificationAsRead } from '../services/api';
+import { markNotificationAsRead, markEventAsRead } from '../services/api';
 
 export function MuralView() {
-  const { events, myNotifications } = useApp();
+  const { events, myNotifications, user } = useApp();
+  const [markingRead, setMarkingRead] = useState<string | null>(null);
+
+  const handleMarkAsRead = async (eventId: string) => {
+    if (!user) return;
+    setMarkingRead(eventId);
+    try {
+      await markEventAsRead(eventId, user.uid);
+    } finally {
+      setMarkingRead(null);
+    }
+  };
 
   return (
     <div className="p-6 max-w-lg mx-auto pb-24 space-y-8">
@@ -72,6 +83,24 @@ export function MuralView() {
                   <p className="text-sm text-gray-600 mt-1.5 leading-relaxed bg-gray-50 p-3 rounded-2xl">
                     {ev.description}
                   </p>
+                  
+                  {ev.type === 'announcement' && user && (
+                    <div className="mt-3 flex justify-end">
+                      {ev.readBy?.includes(user.uid) ? (
+                        <div className="flex items-center text-xs text-green-600 font-medium bg-green-50 px-3 py-1.5 rounded-full">
+                          <Check size={14} className="mr-1" /> Lido
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkAsRead(ev.id)}
+                          disabled={markingRead === ev.id}
+                          className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-1.5 rounded-full font-medium transition-colors disabled:opacity-50"
+                        >
+                          {markingRead === ev.id ? 'Marcando...' : 'Marcar como ciente'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
