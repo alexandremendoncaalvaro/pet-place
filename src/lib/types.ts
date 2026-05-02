@@ -99,6 +99,13 @@ export interface AppNotification {
   message: string;
   isRead: boolean;
   createdAt: string;
+  type?: 'generic' | 'post_comment' | 'post_like' | 'payment' | 'event' | 'mention';
+  actorId?: string;
+  entityType?: 'post' | 'payment' | 'event' | 'comment';
+  entityId?: string;
+  aggregationKey?: string;
+  count?: number;
+  data?: Record<string, unknown>;
 }
 
 export interface IdentityLinkSuggestion {
