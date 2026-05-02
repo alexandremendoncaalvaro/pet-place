@@ -318,7 +318,7 @@ function CommsForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      await addEvent({
+      const eventId = await addEvent({
         title,
         description: desc,
         type,
@@ -332,11 +332,22 @@ function CommsForm() {
       });
       
       if ((type === 'event' && notifyNow) || type === 'announcement') {
-        await addNotification({
-          userId: 'all',
-          title: type === 'event' ? `Novo Evento: ${title}` : `Novo Aviso: ${title}`,
-          message: desc
-        });
+        const workerUrl = import.meta.env.VITE_WORKER_URL;
+        if (workerUrl && eventId) {
+          // Chama o worker para postar a notificação no DB e disparar via Push Nativo (FCM)
+          await fetch(`${workerUrl.replace(/\/$/, '')}/notify-now`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ eventId })
+          });
+        } else {
+          // Fallback caso não tenha Worker configurado: apenas adiciona no mural do app
+          await addNotification({
+            userId: 'all',
+            title: type === 'event' ? `Novo Evento: ${title}` : `Novo Aviso: ${title}`,
+            message: desc
+          });
+        }
       }
 
       alert('Publicado!');

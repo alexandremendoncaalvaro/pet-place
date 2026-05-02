@@ -17,7 +17,8 @@ import {
   subscribeToAllEvents,
   subscribeToMyNotifications,
   isRealBackend,
-  setMockRole
+  setMockRole,
+  requestPushToken
 } from '../services/api';
 
 interface AppState {
@@ -75,6 +76,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUser(u);
         setLoading(false);
         if (u) {
+          requestPushToken(u.uid);
           ensureCurrentMonthPayment(u.uid); // This might use hardcoded 30 internally, we can fix later
           unsubMyPayments = subscribeToMyPayments(u.uid, setMyPayments);
           unsubPets = subscribeToMyPets(u.uid, setMyPets);

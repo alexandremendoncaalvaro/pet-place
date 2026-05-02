@@ -236,3 +236,71 @@ export async function createNotification(
     throw new Error(`Firestore create notification failed (${response.status}): ${errText}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Users: obter todos os FCM tokens
+// ---------------------------------------------------------------------------
+
+export async function getAllFcmTokens(accessToken: string, env: Env): Promise<string[]> {
+  const url = `${firestoreBaseUrl(env)}/users`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) return [];
+
+  const data = (await response.json()) as { documents?: FirestoreDocument[] };
+  if (!data.documents) return [];
+
+  const tokens: string[] = [];
+  for (const doc of data.documents) {
+    const parsed = parseFields(doc.fields);
+    if (parsed.fcmToken && typeof parsed.fcmToken === 'string') {
+      tokens.push(parsed.fcmToken);
+    }
+  }
+  return tokens;
+}
+
+// ---------------------------------------------------------------------------
+// FCM: enviar Push Notification API v1
+// ---------------------------------------------------------------------------
+
+export async function sendFCMMessage(
+  accessToken: string,
+  env: Env,
+  token: string,
+  title: string,
+  body: string
+): Promise<void> {
+  const url = `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`;
+
+  const requestBody = {
+    message: {
+      token,
+      notification: {
+        title,
+        body
+      },
+      webpush: {
+        fcm_options: {
+          link: "https://seu-app.com" // Update com a URL do seu app se quiser abrir ao clicar
+        }
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    console.error(`FCM falhou para token ${token.substring(0, 5)}...:`, await response.text());
+  }
+}

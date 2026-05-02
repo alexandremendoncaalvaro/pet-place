@@ -9,6 +9,7 @@ export interface UserProfile {
   photoUrl?: string;
   role: Role;
   email: string;
+  fcmToken?: string;
   createdAt: string;
 }
 
@@ -68,7 +69,7 @@ export interface AppEvent {
   createdAt: string;
 }
 
-export interface Notification {
+export interface AppNotification {
   id: string;
   userId: string; // 'all' or uid
   title: string;

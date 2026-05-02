@@ -1,14 +1,16 @@
-import { Role, UserProfile, Payment, Expense, PaymentStatus, AppConfig, Pet, AppEvent, Notification } from '../lib/types';
+import { Role, UserProfile, Payment, Expense, PaymentStatus, AppConfig, Pet, AppEvent, AppNotification } from '../lib/types';
 import { format } from 'date-fns';
 
 let db: any = null;
 let auth: any = null;
 let storage: any = null;
+let app: any = null;
 export let isRealBackend = false;
 
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, orderBy, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
+import { getMessaging, getToken } from 'firebase/messaging';
 
 export async function initFirebase() {
   try {
@@ -19,6 +21,7 @@ export async function initFirebase() {
       db = fbModule.db;
       auth = fbModule.auth;
       storage = fbModule.storage;
+      app = fbModule.app;
       isRealBackend = true;
     }
   } catch (error) {
@@ -44,7 +47,7 @@ let MOCK_EVENTS: AppEvent[] = [
   { id: 'ev2', title: 'Manutenção do Portão', description: 'O portão ficará em manutenção das 14h às 16h.', date: '2026-05-03', time: '', type: 'announcement', createdBy: 'mock-admin', createdAt: new Date().toISOString() }
 ];
 
-let MOCK_NOTIFICATIONS: Notification[] = [
+let MOCK_NOTIFICATIONS: AppNotification[] = [
   { id: 'n1', userId: 'mock-resident', title: 'Mensalidade Aprovada', message: 'Seu pagamento de Maio foi aprovado!', isRead: false, createdAt: new Date().toISOString() },
   { id: 'n2', userId: 'all', title: 'Boletim Semanal', message: 'Confira as novidades do mês no painel.', isRead: true, createdAt: new Date().toISOString() }
 ];
@@ -131,6 +134,24 @@ export async function loginWithGoogle(): Promise<UserProfile | null> {
 export async function logout() {
   if (!isRealBackend) return;
   await fbSignOut(auth);
+}
+
+export async function requestPushToken(userId: string) {
+  if (!isRealBackend || !app) return;
+  try {
+    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+    if (!vapidKey) return;
+    const messaging = getMessaging(app);
+    const permission = await window.Notification.requestPermission();
+    if (permission === 'granted') {
+      const token = await getToken(messaging, { vapidKey });
+      if (token) {
+        await updateDoc(doc(db, 'users', userId), { fcmToken: token });
+      }
+    }
+  } catch(e) {
+    console.log('Error requesting FCM token:', e);
+  }
 }
 
 export function subscribeToAuth(callback: (user: UserProfile | null) => void) {
@@ -576,8 +597,9 @@ export function subscribeToAllEvents(callback: (events: AppEvent[]) => void) {
 
 export async function addEvent(data: Omit<AppEvent, 'id' | 'createdAt'>) {
   if (!isRealBackend) {
-    MOCK_EVENTS.push({ ...data, id: Date.now().toString(), createdAt: new Date().toISOString() });
-    return;
+    const newId = Date.now().toString();
+    MOCK_EVENTS.push({ ...data, id: newId, createdAt: new Date().toISOString() });
+    return newId;
   }
   try {
     const d = doc(collection(db, 'events'));
@@ -585,6 +607,7 @@ export async function addEvent(data: Omit<AppEvent, 'id' | 'createdAt'>) {
       ...data,
       createdAt: new Date().toISOString()
     });
+    return d.id;
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -621,14 +644,14 @@ export async function markEventAsRead(eventId: string, userId: string) {
   } catch(e) { handleFirestoreError(e); }
 }
 
-export function subscribeToMyNotifications(userId: string, callback: (n: Notification[]) => void) {
+export function subscribeToMyNotifications(userId: string, callback: (n: AppNotification[]) => void) {
   if (!isRealBackend) {
     callback(MOCK_NOTIFICATIONS.filter(n => n.userId === userId || n.userId === 'all'));
     return () => {};
   }
   const q1 = query(collection(db, 'notifications'), where('userId', 'in', [userId, 'all']));
   return onSnapshot(q1, snap => {
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
     docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     callback(docs);
   }, handleFirestoreError);
@@ -645,7 +668,7 @@ export async function markNotificationAsRead(notificationId: string) {
   } catch(e) { handleFirestoreError(e); }
 }
 
-export async function addNotification(data: Omit<Notification, 'id' | 'createdAt' | 'isRead'>) {
+export async function addNotification(data: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>) {
   if (!isRealBackend) {
     MOCK_NOTIFICATIONS.push({ ...data, isRead: false, id: Date.now().toString(), createdAt: new Date().toISOString() });
     return;

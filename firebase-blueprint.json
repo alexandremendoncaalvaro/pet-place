@@ -12,6 +12,7 @@
         "photoUrl": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "resident"] },
         "email": { "type": "string" },
+        "fcmToken": { "type": "string" },
         "createdAt": { "type": "string" }
       },
       "required": ["uid", "name", "role", "email", "createdAt"]
@@ -25,11 +26,21 @@
         "month": { "type": "string" },
         "amount": { "type": "number" },
         "proofUrl": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "analyzing", "approved", "rejected"] },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "analyzing", "approved", "rejected"]
+        },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["userId", "month", "amount", "status", "createdAt", "updatedAt"]
+      "required": [
+        "userId",
+        "month",
+        "amount",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Expense": {
       "title": "Expense",
@@ -44,7 +55,14 @@
         "createdBy": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["date", "title", "category", "amount", "createdBy", "createdAt"]
+      "required": [
+        "date",
+        "title",
+        "category",
+        "amount",
+        "createdBy",
+        "createdAt"
+      ]
     },
     "Pet": {
       "title": "Pet",
@@ -69,10 +87,27 @@
         "date": { "type": "string" },
         "time": { "type": "string" },
         "type": { "type": "string", "enum": ["event", "announcement"] },
+        "notify24h": { "type": "boolean" },
+        "notify1h": { "type": "boolean" },
+        "notifyNow": { "type": "boolean" },
+        "notified24h": { "type": "boolean" },
+        "notified1h": { "type": "boolean" },
+        "notifiedNow": { "type": "boolean" },
+        "readBy": { "type": "array", "items": { "type": "string" } },
         "createdBy": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["title", "description", "type", "createdBy", "createdAt"]
+      "required": [
+        "title",
+        "description",
+        "type",
+        "notify24h",
+        "notify1h",
+        "notifyNow",
+        "readBy",
+        "createdBy",
+        "createdAt"
+      ]
     },
     "Notification": {
       "title": "Notification",
@@ -98,7 +133,13 @@
         "paymentInstructions": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["pixKey", "monthlyAmount", "dueDateDay", "paymentInstructions", "updatedAt"]
+      "required": [
+        "pixKey",
+        "monthlyAmount",
+        "dueDateDay",
+        "paymentInstructions",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {

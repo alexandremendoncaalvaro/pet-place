@@ -12,8 +12,28 @@ import {
   getEvent,
   updateEventField,
   createNotification,
+  getAllFcmTokens,
+  sendFCMMessage,
   type FirestoreEvent,
 } from './firestore';
+
+// ---------------------------------------------------------------------------
+// Helpers: Enviar Push e Salvar Notificação
+// ---------------------------------------------------------------------------
+async function notifyAllAppUsers(accessToken: string, env: Env, title: string, message: string) {
+  // 1. Salvar no Firestore (aparece no 'sininho' do App)
+  await createNotification(accessToken, env, {
+    userId: 'all',
+    title,
+    message,
+  });
+
+  // 2. Disparar FCM (Vibra o celular / tela de bloqueio)
+  const tokens = await getAllFcmTokens(accessToken, env);
+  for (const token of tokens) {
+    await sendFCMMessage(accessToken, env, token, title, message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // CRON: processar lembretes de eventos agendados
@@ -51,11 +71,12 @@ export async function processScheduledEvents(env: Env): Promise<{ processed: num
     if (event.notify24h && !event.notified24h && diffHours <= 24 && diffHours > 0) {
       console.log(`[24h] Notificando evento "${event.title}" (${event.id})`);
 
-      await createNotification(accessToken, env, {
-        userId: 'all',
-        title: `📅 Lembrete: amanhã tem "${event.title}"`,
-        message: event.description || 'Confira os detalhes no mural.',
-      });
+      await notifyAllAppUsers(
+        accessToken, 
+        env, 
+        `📅 Lembrete: amanhã tem "${event.title}"`, 
+        event.description || 'Confira os detalhes no mural.'
+      );
 
       await updateEventField(accessToken, env, event.id, 'notified24h', true);
       notified++;
@@ -65,11 +86,12 @@ export async function processScheduledEvents(env: Env): Promise<{ processed: num
     if (event.notify1h && !event.notified1h && diffHours <= 1 && diffHours > 0) {
       console.log(`[1h] Notificando evento "${event.title}" (${event.id})`);
 
-      await createNotification(accessToken, env, {
-        userId: 'all',
-        title: `⏰ Daqui a 1 hora: "${event.title}"`,
-        message: event.description || 'Confira os detalhes no mural.',
-      });
+      await notifyAllAppUsers(
+        accessToken, 
+        env, 
+        `⏰ Daqui a 1 hora: "${event.title}"`, 
+        event.description || 'Confira os detalhes no mural.'
+      );
 
       await updateEventField(accessToken, env, event.id, 'notified1h', true);
       notified++;
@@ -99,11 +121,12 @@ export async function processImmediateNotification(env: Env, eventId: string): P
 
   const emoji = event.type === 'event' ? '📢' : '📌';
 
-  await createNotification(accessToken, env, {
-    userId: 'all',
-    title: `${emoji} ${event.title}`,
-    message: event.description || '',
-  });
+  await notifyAllAppUsers(
+    accessToken, 
+    env, 
+    `${emoji} ${event.title}`, 
+    event.description || ''
+  );
 
   // Marcar como notificado
   await updateEventField(accessToken, env, event.id, 'notifiedNow', true);
