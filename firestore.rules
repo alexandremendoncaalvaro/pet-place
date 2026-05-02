@@ -201,14 +201,8 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(petId) && (existing().ownerId == request.auth.uid || isAdmin());
     }
 
-    function isValidEventCore(data) {
-      // Campos obrigatórios
-      return data.keys().hasAll(['title', 'description', 'date', 'time', 'type', 'createdBy', 'createdAt'])
-        // Campos opcionais permitidos (notificações + leitura)
-        && data.keys().hasOnly(['title', 'description', 'date', 'time', 'type', 'createdBy', 'createdAt',
-                                'notify24h', 'notify1h', 'notifyNow',
-                                'notified24h', 'notified1h', 'notifiedNow',
-                                'readBy'])
+    function isValidEventConfig(data) {
+      return hasAllKeys(data, ['title', 'description', 'date', 'time', 'type', 'createdBy', 'createdAt'])
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && data.description is string && data.description.size() <= 2000
         && data.date is string && data.date.size() <= 20
@@ -221,20 +215,12 @@ service cloud.firestore {
     match /events/{eventId} {
       allow read: if isSignedIn();
       allow create: if isAdmin() && isValidId(eventId)
-                    && isValidEventCore(incoming())
+                    && isValidEventConfig(incoming())
                     && incoming().createdBy == request.auth.uid;
-      // Admin pode atualizar tudo; worker (service account) atualiza apenas flags de notificação
-      allow update: if isSignedIn() && isValidId(eventId)
-                    && isValidEventCore(incoming())
+      allow update: if isAdmin() && isValidId(eventId)
+                    && isValidEventConfig(incoming())
                     && incoming().createdBy == existing().createdBy
-                    && incoming().createdAt == existing().createdAt
-                    && (
-                      isAdmin()
-                      || (
-                        // Moradores podem marcar leitura (readBy)
-                        incoming().diff(existing()).affectedKeys().hasOnly(['readBy'])
-                      )
-                    );
+                    && incoming().createdAt == existing().createdAt;
       allow delete: if isAdmin() && isValidId(eventId);
     }
 
