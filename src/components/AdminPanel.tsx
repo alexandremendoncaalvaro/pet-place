@@ -1,10 +1,80 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
-import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData } from '../services/api';
-import { Payment } from '../lib/types';
+import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment } from '../services/api';
+import { Payment, UserProfile, AppEvent } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+
+const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
+  const [confirming, setConfirming] = useState(false);
+  
+  if (confirming) {
+    return (
+      <div className="flex-1 flex gap-1 animate-in zoom-in-95">
+        <button onClick={() => setConfirming(false)} className="flex-1 text-[10px] bg-gray-100 text-gray-600 py-1.5 rounded-lg border border-gray-200">Cancelar</button>
+        <button onClick={async () => {
+          await deleteUserAndData(u.uid);
+          alert('Dados apagados.');
+        }} className="flex-1 text-[10px] bg-red-500 text-white py-1.5 rounded-lg active:bg-red-600 shadow-sm">Sim, Excluir</button>
+      </div>
+    );
+  }
+  return (
+    <button 
+      onClick={() => setConfirming(true)}
+      className="flex-1 text-[10px] bg-red-50 text-red-600 py-1.5 rounded-lg font-medium transition-colors hover:bg-red-100"
+      title="Excluir Dados (LGPD)"
+    >
+      Excluir (LGPD)
+    </button>
+  );
+};
+
+const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }) => {
+  const [confirming, setConfirming] = useState(false);
+  const residentCount = allUsers.filter(u => u.role === 'resident').length;
+  const readCount = evt.readBy?.length || 0;
+  const isEvent = evt.type === 'event';
+  
+  return (
+    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50 flex flex-col gap-2">
+      <div className="flex justify-between items-start">
+        <div>
+          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${isEvent ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+            {isEvent ? 'Evento' : 'Aviso'}
+          </span>
+          <h4 className="text-sm font-semibold text-gray-800 mt-1">{evt.title}</h4>
+        </div>
+        
+        {confirming ? (
+          <div className="flex items-center gap-1 bg-red-50 p-1 rounded-lg origin-top-right animate-in zoom-in-95">
+             <span className="text-[10px] text-red-600 font-medium px-1">Excluir?</span>
+             <button onClick={() => setConfirming(false)} className="text-[10px] bg-white px-2 py-1 rounded text-gray-600 shadow-sm border border-gray-200">Não</button>
+             <button onClick={async () => {
+               await deleteEvent(evt.id);
+             }} className="text-[10px] bg-red-500 px-2 py-1 rounded text-white shadow-sm">Sim</button>
+          </div>
+        ) : (
+          <button className="text-gray-400 hover:text-red-500 transition-colors p-1" onClick={() => setConfirming(true)}>
+            <XCircle size={16} />
+          </button>
+        )}
+      </div>
+      
+      <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+        <span className="flex items-center gap-1" title="Visualizações">
+          <Eye size={14} /> {readCount} / {residentCount}
+        </span>
+        {isEvent && evt.date && (
+          <span className="flex items-center gap-1">
+            <Calendar size={14} /> {format(new Date(evt.date), 'dd/MM/yyyy')} {evt.time}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export function AdminPanel() {
   const { allPayments, allUsers, appConfig } = useApp();
@@ -54,18 +124,38 @@ export function AdminPanel() {
       </div>
 
       {tab === 'approvals' && (
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-800 text-lg mb-2">Aguardando Avaliação</h3>
-          {allPayments.filter(p => p.status === 'analyzing').length === 0 ? (
-             <div className="text-center text-gray-400 text-sm py-8 bg-white rounded-3xl border border-gray-100">
-               Tudo limpo! Nenhuma pendência.
-             </div>
-          ) : (
-            allPayments.filter(p => p.status === 'analyzing').map(payment => {
-              const u = allUsers.find(x => x.familyId === payment.familyId || x.uid === payment.familyId);
-              return <ApprovalCard key={payment.id} payment={payment} userName={u?.name ? u.name + ' (Família)' : 'Família'} />;
-            })
-          )}
+        <div className="space-y-6">
+          <div>
+            <h3 className="font-semibold text-gray-800 text-lg mb-3">Aguardando Avaliação</h3>
+            {allPayments.filter(p => p.status === 'analyzing').length === 0 ? (
+               <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-3xl border border-gray-100">
+                 Tudo limpo! Nenhuma pendência para analisar.
+               </div>
+            ) : (
+              <div className="space-y-4">
+                {allPayments.filter(p => p.status === 'analyzing').map(payment => {
+                  const u = allUsers.find(x => x.familyId === payment.familyId || x.uid === payment.familyId);
+                  return <ApprovalCard key={payment.id} payment={payment} userName={u?.name ? u.name + ' (Família)' : 'Família'} />;
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-gray-800 text-lg mb-3">Cobranças Pendentes</h3>
+            {allPayments.filter(p => p.status === 'pending').length === 0 ? (
+               <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-3xl border border-gray-100">
+                 Nenhuma cobrança pendente.
+               </div>
+            ) : (
+              <div className="space-y-4">
+                {allPayments.filter(p => p.status === 'pending').map(payment => {
+                  const u = allUsers.find(x => x.familyId === payment.familyId || x.uid === payment.familyId);
+                  return <PendingChargeCard key={payment.id} payment={payment} userName={u?.name ? u.name + ' (Família)' : 'Família'} />;
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -85,16 +175,42 @@ export function AdminPanel() {
                     {u.userStatus === 'blocked' && <span className="text-[10px] uppercase font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Bloqueado</span>}
                     {u.userStatus === 'active' && <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Ativo</span>}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">Contato: {u.phone || '-'}</p>
+                  <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                    Contato: 
+                    {editingPhoneUid === u.uid ? (
+                      <form 
+                        className="flex items-center gap-1 inline-flex"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          updateProfile(u.uid, { phone: (e.target as any).elements.phone.value });
+                          setEditingPhoneUid(null);
+                        }}
+                      >
+                         <input name="phone" defaultValue={u.phone || ''} className="border border-gray-300 rounded px-1 py-0.5 w-24 text-[10px]" autoFocus />
+                         <button type="submit" className="text-emerald-500 bg-emerald-50 px-1 py-0.5 rounded text-[10px]">OK</button>
+                      </form>
+                    ) : (
+                      <>
+                        {u.phone || '-'}
+                        <button 
+                          onClick={() => setEditingPhoneUid(u.uid)}
+                          className="ml-1 text-blue-500 hover:text-blue-700 transition-colors p-1"
+                          title="Editar telefone"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <button 
                   onClick={() => {
                     const isAdmin = u.role === 'admin';
-                    if(confirm(`Mudar papel de ${u.name} para ${isAdmin ? 'Pessoa' : 'Admin'}?`)) {
-                      updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
-                    }
+                    // Assuming they can toggle via a double-tap/long press or we just build an inline confirm. Let's just use double-click logic using a flag, or simpler: since they are admin, just allow direct toggle, or maybe a simple confirm state. To avoid complexity, we just toggle.
+                    updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
                   }}
                   className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
+                  title="Clique duplo para alterar o papel"
                 >
                   {u.role === 'admin' ? 'Admin' : 'Pessoa'}
                 </button>
@@ -116,18 +232,7 @@ export function AdminPanel() {
                     {u.userStatus === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                   </button>
                 )}
-                <button 
-                  onClick={async () => {
-                    const typed = prompt(`Isso excluirá DEFINITIVAMENTE os dados, posts e pets de ${u.name}. Digite EXCLUIR para confirmar.`);
-                    if(typed === 'EXCLUIR') {
-                      await deleteUserAndData(u.uid);
-                      alert('Usuário e seus dados foram apagados da base.');
-                    }
-                  }}
-                  className="flex-1 text-xs bg-red-100 active:bg-red-200 text-red-600 py-1.5 rounded-lg font-medium transition-colors"
-                >
-                  Excluir Dados (LGPD)
-                </button>
+                <DeletableUserButton u={u} deleteUserAndData={deleteUserAndData} />
               </div>
             </div>
           ))}
@@ -247,7 +352,7 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
           </span>
           {payment.description && <p className="text-sm text-gray-600 mt-1">{payment.description}</p>}
         </div>
-        <span className="font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl text-sm">
+        <span className="font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl text-sm whitespace-nowrap ml-2">
           R$ {payment.amount.toFixed(2)}
         </span>
       </div>
@@ -274,16 +379,99 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
   );
 }
 
+const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ payment, userName }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (file: File) => {
+    try {
+      setIsProcessing(true);
+      await uploadProofAndSubmit(payment.id, file);
+      alert("Comprovante anexado! A cobrança foi movida para Avaliação.");
+    } catch (err) {
+      alert("Erro ao enviar comprovante.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex flex-col gap-3">
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <h4 className="font-semibold text-gray-800">{userName || 'User'}</h4>
+          <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-md mt-1 inline-block">
+            {payment.type === 'doacao' ? 'Doação' : payment.type === 'rateio' ? 'Rateio' : 'Mensalidade'} • Ref: {payment.month}
+          </span>
+          {payment.description && <p className="text-sm text-gray-600 mt-1">{payment.description}</p>}
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className="font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl text-sm whitespace-nowrap ml-2">
+            R$ {payment.amount.toFixed(2)}
+          </span>
+          {confirmingDelete ? (
+            <div className="bg-red-50 p-2 rounded-lg flex flex-col gap-1 mt-1 origin-top-right animate-in zoom-in-95">
+              <span className="text-[10px] text-red-600 font-medium whitespace-nowrap">Confirmar exclusão?</span>
+              <div className="flex gap-1 justify-end mt-1">
+                 <button disabled={isProcessing} onClick={() => setConfirmingDelete(false)} className="text-[10px] bg-white border border-gray-200 px-2 py-1 rounded shadow-sm text-gray-600 transition-colors active:bg-gray-50 disabled:opacity-50">Não</button>
+                 <button disabled={isProcessing} onClick={async () => {
+                   setIsProcessing(true);
+                   try {
+                     await deletePayment(payment.id);
+                   } catch (e: any) {
+                     alert(e.message || 'Erro');
+                   } finally {
+                     setIsProcessing(false);
+                     setConfirmingDelete(false);
+                   }
+                 }} className="text-[10px] bg-red-500 px-2 py-1 rounded shadow-sm text-white transition-colors active:bg-red-600 disabled:opacity-50">Sim, excluir</button>
+              </div>
+            </div>
+          ) : (
+            <button 
+              disabled={isProcessing}
+              onClick={() => setConfirmingDelete(true)}
+              className="text-gray-400 hover:text-red-500 transition-colors p-1"
+              title="Apagar cobrança incorreta"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <button 
+        disabled={isProcessing}
+        onClick={() => fileRef.current?.click()}
+        className="w-full bg-gray-50 text-gray-600 py-3 rounded-xl font-medium flex items-center justify-center transition-transform active:scale-95 disabled:opacity-50"
+      >
+        {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <><Receipt size={18} className="mr-2" /> Anexar Comprovante do Morador</>}
+      </button>
+      <input 
+        ref={fileRef} 
+        type="file" 
+        accept="image/*" 
+        className="hidden" 
+        onChange={(e) => {
+          if (e.target.files?.[0]) handleUpload(e.target.files[0]);
+        }} 
+      />
+    </div>
+  );
+}
+
 function ExpenseForm() {
   const { user } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileRef.current?.files?.[0]) {
+    if (!file) {
       alert("Por favor, anexe o comprovante.");
       return;
     }
@@ -295,11 +483,12 @@ function ExpenseForm() {
       category: 'Geral',
       createdBy: user?.uid || '',
       createdAt: new Date().toISOString()
-    }, fileRef.current.files[0]);
+    }, file);
     setLoading(false);
     alert('Despesa lançada com sucesso!');
     setTitle('');
     setAmount('');
+    setFile(null);
   };
 
   return (
@@ -327,16 +516,31 @@ function ExpenseForm() {
         />
       </div>
       <div>
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Nota Fiscal (Foto)</label>
-        <button 
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="w-full bg-gray-50 border border-dashed border-gray-300 rounded-2xl py-6 flex flex-col items-center justify-center text-gray-500 active:bg-gray-100"
-        >
-          <Receipt size={24} className="mb-2 opacity-50" />
-          <span className="text-sm font-medium">Tocar para Anexar</span>
-        </button>
-        <input ref={fileRef} type="file" required accept="image/*" className="hidden" />
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Comprovante (Foto)</label>
+        {file ? (
+          <div className="relative w-full aspect-video bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center">
+            <img src={URL.createObjectURL(file)} alt="Preview" className="max-w-full max-h-full object-contain" />
+            <button 
+              type="button"
+              className="absolute top-2 right-2 bg-black/60 text-white p-2 rounded-full backdrop-blur-md"
+              onClick={() => { setFile(null); if(fileRef.current) fileRef.current.value=''; }}
+            >
+              <XCircle size={20} />
+            </button>
+          </div>
+        ) : (
+          <button 
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="w-full bg-gray-50 border border-dashed border-gray-300 rounded-2xl py-6 flex flex-col items-center justify-center text-gray-500 active:bg-gray-100"
+          >
+            <Receipt size={24} className="mb-2 opacity-50" />
+            <span className="text-sm font-medium">Tocar para Anexar</span>
+          </button>
+        )}
+        <input ref={fileRef} type="file" required={!file} accept="image/*" className="hidden" onChange={e => {
+          if (e.target.files?.[0]) setFile(e.target.files[0]);
+        }} />
       </div>
       
       <button 
@@ -356,6 +560,9 @@ function RateioForm() {
   const [amountStr, setAmountStr] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+
+  const [showRateioConfirm, setShowRateioConfirm] = useState(false);
+  const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
   // Active users only to avoid charging pending/blocked people unless desired, but let's just show all active
   const selectableUsers = allUsers.filter(u => u.userStatus === 'active' || u.userStatus === undefined);
@@ -390,33 +597,38 @@ function RateioForm() {
 
     setLoading(true);
     
-    // Group charges by family
-    const familyCharges: Record<string, number> = {};
-    for (const uid of selectedUsers) {
-      const user = selectableUsers.find(u => u.uid === uid);
-      if (user) {
-        const fId = user.familyId || user.uid;
-        familyCharges[fId] = (familyCharges[fId] || 0) + valuePerPerson;
+    try {
+      // Group charges by family
+      const familyCharges: Record<string, number> = {};
+      for (const uid of selectedUsers) {
+        const user = selectableUsers.find(u => u.uid === uid);
+        if (user) {
+          const fId = user.familyId || user.uid;
+          familyCharges[fId] = (familyCharges[fId] || 0) + valuePerPerson;
+        }
       }
+
+      const currentMonth = format(new Date(), 'yyyy-MM');
+      const charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[] = Object.entries(familyCharges).map(([familyId, amount]) => ({
+        familyId,
+        month: currentMonth,
+        amount,
+        status: 'pending',
+        type: 'rateio',
+        description: desc.trim()
+      }));
+
+      await createCharges(charges);
+      
+      alert('Rateio gerado com sucesso! As famílias verão a cobrança agregada.');
+      setDesc('');
+      setAmountStr('');
+      setSelectedUsers(new Set());
+    } catch(e: any) {
+      alert('Erro ao gerar rateio: ' + (e.message || e));
+    } finally {
+      setLoading(false);
     }
-
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    const charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[] = Object.entries(familyCharges).map(([familyId, amount]) => ({
-      familyId,
-      month: currentMonth,
-      amount,
-      status: 'pending',
-      type: 'rateio',
-      description: desc.trim()
-    }));
-
-    await createCharges(charges);
-    
-    setLoading(false);
-    alert('Rateio gerado com sucesso! As famílias verão a cobrança agregada.');
-    setDesc('');
-    setAmountStr('');
-    setSelectedUsers(new Set());
   };
 
   return (

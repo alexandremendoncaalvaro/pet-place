@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X } from 'lucide-react';
+import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AppPost, PostComment } from '../lib/types';
-import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment } from '../services/api';
+import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
@@ -25,6 +25,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<PostComment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [showLikes, setShowLikes] = useState(false);
   
   useEffect(() => {
     let unsub: () => void;
@@ -50,6 +51,33 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     if (!editContent.trim()) return;
     setIsSavingEdit(true);
     await updatePost(post.id, editContent, editTags);
+    
+    // Check if new tags were added
+    const newTags = editTags.filter(t => !(post.tags || []).includes(t));
+    if (newTags.length > 0 && user) {
+      const targetUids = new Set<string>();
+      newTags.forEach(tagId => {
+        const taggedUser = publicProfiles.find(p => p.uid === tagId);
+        if (taggedUser) {
+          targetUids.add(taggedUser.uid);
+        } else {
+          const taggedPet = allPets.find(p => p.id === tagId);
+          if (taggedPet) {
+            const owners = publicProfiles.filter(p => (p.familyId || p.uid) === taggedPet.familyId);
+            owners.forEach(o => targetUids.add(o.uid));
+          }
+        }
+      });
+      targetUids.delete(user.uid);
+      targetUids.forEach(uid => {
+        addNotification({
+          userId: uid,
+          title: 'Nova Menção!',
+          message: `${user.name} marcou você ou seu pet na alteração de uma publicação.`,
+        }).catch(e => console.error(e));
+      });
+    }
+    
     setIsSavingEdit(false);
     setIsEditing(false);
     setShowEditTagsSelector(false);
@@ -65,9 +93,14 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    setIsDeletingComment(commentId);
-    await deleteComment(commentId);
-    setIsDeletingComment(null);
+    try {
+      setIsDeletingComment(commentId);
+      await deleteComment(commentId);
+    } catch(e: any) {
+      alert(e.message || 'Erro ao deletar comentário');
+    } finally {
+      setIsDeletingComment(null);
+    }
   };
 
   return (
@@ -135,19 +168,46 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
       )}
 
       <div className="p-4">
-        <div className="flex items-center gap-4 mb-2">
-          <button 
-            onClick={() => togglePostLike(post.id, user!.uid, isLiked)}
-            className="flex items-center gap-1 text-gray-500 active:scale-90 transition-transform"
-          >
-            <Heart size={22} className={isLiked ? "fill-red-500 text-red-500" : ""} />
-            <span className="text-sm font-medium">{post.likedBy?.length || 0}</span>
-          </button>
-          <button onClick={() => setShowComments(!showComments)} className="text-gray-500 flex items-center gap-1">
-            <MessageCircle size={22} className={showComments ? "text-blue-500" : ""} />
-            <span className="text-sm font-medium">{comments.length > 0 ? comments.length : ''}</span>
-          </button>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => togglePostLike(post.id, user!.uid, isLiked)}
+              className="flex items-center gap-1 text-gray-500 active:scale-90 transition-transform"
+            >
+              <Heart size={22} className={isLiked ? "fill-red-500 text-red-500" : ""} />
+              <span className="text-sm font-medium">{post.likedBy?.length || 0}</span>
+            </button>
+            <button onClick={() => setShowComments(!showComments)} className="text-gray-500 flex items-center gap-1 active:scale-95 transition-transform">
+              <MessageCircle size={22} className={showComments ? "text-blue-500" : ""} />
+              <span className="text-sm font-medium">{comments.length > 0 ? comments.length : ''}</span>
+            </button>
+          </div>
+          {(post.likedBy?.length || 0) > 0 && (
+            <button onClick={() => setShowLikes(!showLikes)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <Eye size={20} className={showLikes ? "text-blue-500" : ""} />
+            </button>
+          )}
         </div>
+
+        {showLikes && (post.likedBy?.length || 0) > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1 bg-gray-50 p-2 rounded-xl border border-gray-100">
+            {post.likedBy?.map(uid => {
+              const p = publicProfiles.find(x => x.uid === uid);
+              if (!p) return null;
+              return (
+                <div key={uid} onClick={() => setViewProfileId(uid)} className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all" title={p.name}>
+                  {p.photoUrl ? (
+                    <ImageWithSkeleton src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" containerClassName="w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-200">
+                      {p.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         
         {isEditing ? (
           <div className="mt-2 text-left">

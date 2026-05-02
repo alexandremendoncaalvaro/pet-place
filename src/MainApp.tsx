@@ -185,13 +185,15 @@ export function MainApp() {
       )}
 
       {/* Floating Action Button for Posting */}
-      <button 
-        onClick={() => setShowCreatePost(true)}
-        className="fixed bottom-[80px] sm:bottom-24 right-4 sm:right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-90 z-20"
-        aria-label="Nova publicação"
-      >
-        <Plus size={28} />
-      </button>
+      {activeTab === 'home' && (
+        <button 
+          onClick={() => setShowCreatePost(true)}
+          className="fixed bottom-[80px] sm:bottom-24 right-4 sm:right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-90 z-20"
+          aria-label="Nova publicação"
+        >
+          <Plus size={28} />
+        </button>
+      )}
 
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
       <GlobalModals />

@@ -99,7 +99,9 @@ export function DirectoryView() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-gray-800 truncate">{profile.name}</h4>
-                    <p className="text-xs text-blue-600 font-medium capitalize mt-1 border border-blue-100 bg-blue-50 px-2 py-0.5 rounded-md w-max">{profile.role}</p>
+                    {profile.role === 'admin' && (
+                      <p className="text-xs text-blue-600 font-medium capitalize mt-1 border border-blue-100 bg-blue-50 px-2 py-0.5 rounded-md w-max">{profile.role}</p>
+                    )}
                     {familyPets.length > 0 && (
                       <div className="mt-2 flex items-center gap-2">
                         <div className="text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max border border-gray-200">

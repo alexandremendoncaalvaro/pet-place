@@ -18,13 +18,16 @@ export function GlobalModals() {
   const getFamilyMembers = (uid: string) => {
     const person = publicProfiles.find(p => p.uid === uid);
     if (!person) return [];
-    return publicProfiles.filter(p => p.familyId === person.familyId);
+    const famId = person.familyId || person.uid;
+    return publicProfiles.filter(p => (p.familyId || p.uid) === famId);
   };
 
   const getFamilyPets = (uid: string) => {
     const person = publicProfiles.find(p => p.uid === uid);
     if (!person) return [];
-    return allPets.filter(p => p.ownerId === person.familyId || p.ownerId === uid); // Simplified pet owner lookup
+    const famId = person.familyId || person.uid;
+    const famMembers = publicProfiles.filter(p => (p.familyId || p.uid) === famId);
+    return allPets.filter(p => famMembers.some(m => p.ownerId === m.uid) || p.ownerId === uid);
   };
 
   return (
@@ -70,7 +73,9 @@ export function GlobalModals() {
                 )}
               </div>
               <h3 className="text-xl font-bold">{selectedPerson.name}</h3>
-              <p className="text-blue-100 text-sm capitalize">{selectedPerson.role}</p>
+              {selectedPerson.role === 'admin' && (
+                <p className="text-blue-100 text-sm capitalize">{selectedPerson.role}</p>
+              )}
             </div>
             
             <div className="p-6 overflow-y-auto">
@@ -156,7 +161,7 @@ export function GlobalModals() {
                 <Users size={16} /> Tutores
               </h4>
               <div className="space-y-3 mb-6">
-                {publicProfiles.filter(p => p.familyId === selectedPet.ownerId || p.uid === selectedPet.ownerId).map(m => (
+                {getFamilyMembers(selectedPet.ownerId).map(m => (
                   <div key={m.uid} className="flex items-center gap-3 bg-gray-50 p-3 rounded-2xl cursor-pointer hover:bg-gray-100" onClick={() => {setViewProfileId(m.uid); setViewPetId(null);}}>
                      <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center overflow-hidden">
                        {m.photoUrl ? <img src={m.photoUrl} alt={m.name} className="w-full h-full object-cover" /> : <User size={20} />}

@@ -3,6 +3,9 @@ import React, { useState } from 'react';
 interface ImageWithSkeletonProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   containerClassName?: string;
   skeletonClassName?: string;
+  src?: string;
+  alt?: string;
+  className?: string;
 }
 
 export function ImageWithSkeleton({

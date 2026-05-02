@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, ImagePlus, AtSign, Send } from 'lucide-react';
-import { addPost } from '../services/api';
+import { X, ImagePlus, AtSign, Send, FileVideo } from 'lucide-react';
+import { addPost, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 interface CreatePostModalProps {
@@ -31,6 +31,38 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
         postData.mediaType = postFile.type.startsWith('video/') ? 'video' : 'image';
       }
       await addPost(postData, postFile || undefined);
+      
+      // Submit notifications for tags
+      if (postTags.length > 0) {
+        const targetUids = new Set<string>();
+        
+        postTags.forEach(tagId => {
+          // Check if it's a person
+          const taggedUser = publicProfiles.find(p => p.uid === tagId);
+          if (taggedUser) {
+            targetUids.add(taggedUser.uid);
+          } else {
+            // Check if it's a pet
+            const taggedPet = allPets.find(p => p.id === tagId);
+            if (taggedPet) {
+              const owners = publicProfiles.filter(p => (p.familyId || p.uid) === taggedPet.familyId);
+              owners.forEach(o => targetUids.add(o.uid));
+            }
+          }
+        });
+        
+        // Remove author from notifications list
+        targetUids.delete(user!.uid);
+        
+        targetUids.forEach(uid => {
+          addNotification({
+            userId: uid,
+            title: 'Nova Menção!',
+            message: `${user!.name} marcou você ou seu pet em uma publicação recente.`,
+          }).catch(e => console.error(e));
+        });
+      }
+      
       onClose();
     } catch(e) {
       alert("Erro ao postar.");

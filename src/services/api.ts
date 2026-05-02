@@ -140,6 +140,15 @@ export async function loginWithGoogle(): Promise<UserProfile | null> {
       role: newProfile.role,
       createdAt: newProfile.createdAt
     });
+    
+    // Notify admins
+    if (!isAdminUser) {
+      await addNotification({
+        userId: 'admins',
+        title: 'Novo Cadastro',
+        message: `${newProfile.name} se cadastrou no app e aguarda aprovação de acesso.`
+      }).catch(e => console.warn('Could not notify admins', e));
+    }
     return newProfile;
   }
 }
@@ -210,54 +219,65 @@ export async function ensureCurrentMonthPayment(familyId: string) {
   
   if (ensuringLock.has(lockKey)) return;
   ensuringLock.add(lockKey);
-
-  let defaultAmount = 30;
   
   if (!isRealBackend) {
-    defaultAmount = MOCK_CONFIG.monthlyAmount;
-    const exists = MOCK_PAYMENTS.find(p => p.familyId === familyId && p.month === currentMonth);
+    const exists = MOCK_PAYMENTS.find(p => p.familyId === familyId && p.month === currentMonth && (!p.type || p.type === 'mensalidade'));
     if (!exists) {
       MOCK_PAYMENTS.push({
         id: 'p' + Math.random(),
         familyId,
         month: currentMonth,
-        amount: defaultAmount,
+        amount: MOCK_CONFIG.monthlyAmount,
         proofUrl: '',
         status: 'pending',
+        type: 'mensalidade',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      window.dispatchEvent(new Event('mockDataChanged'));
     }
     ensuringLock.delete(lockKey);
     return;
   }
   
+  let defaultAmount: number;
   try {
     const confSnap = await getDoc(doc(db, 'settings', 'config'));
     if (confSnap.exists() && confSnap.data().monthlyAmount !== undefined) {
       defaultAmount = confSnap.data().monthlyAmount;
+    } else {
+      // Configuration not established yet; do not generate pending payment!
+      ensuringLock.delete(lockKey);
+      return; 
     }
-  } catch(e) {}
+  } catch(e) {
+    ensuringLock.delete(lockKey);
+    return;
+  }
   
   try {
     const paymentsQuery = query(collection(db, 'payments'), where('familyId', '==', familyId), where('month', '==', currentMonth));
     const snap = await getDocs(paymentsQuery);
     
-    if (snap.empty) {
+    let docs = snap.docs.map(d => ({ id: d.id, data: d.data() as Payment }));
+    // Filter to only consider 'mensalidade' or old untyped charges as monthly charge
+    docs = docs.filter(p => !p.data.type || p.data.type === 'mensalidade');
+    
+    if (docs.length === 0) {
       const newDoc = doc(collection(db, 'payments'));
-      const payment = {
+      const payment: Partial<Payment> & {id?: string} = {
         familyId,
         month: currentMonth,
         amount: defaultAmount,
         proofUrl: '',
         status: 'pending',
+        type: 'mensalidade',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       await setDoc(newDoc, payment);
-    } else if (snap.size > 1) {
+    } else if (docs.length > 1) {
       // Cleanup duplicates created by race condition
-      const docs = snap.docs.map(d => ({ id: d.id, data: d.data() as Payment }));
       docs.sort((a, b) => {
         const statuses = { approved: 4, analyzing: 3, pending: 2, rejected: 1 };
         return (statuses[b.data.status as keyof typeof statuses] || 0) - (statuses[a.data.status as keyof typeof statuses] || 0);
@@ -387,6 +407,12 @@ export async function submitDonation(amount: number, file: File, familyId: strin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+    
+    await addNotification({
+      userId: 'admins',
+      title: 'Nova Doação',
+      message: `Uma doação de R$ ${amount.toFixed(2)} enviou comprovante e aguarda análise.`
+    }).catch(e => console.warn('Notification error', e));
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -417,6 +443,12 @@ export async function uploadProofAndSubmit(paymentId: string, file: File) {
       proofUrl: url,
       updatedAt: new Date().toISOString()
     });
+    
+    await addNotification({
+      userId: 'admins',
+      title: 'Comprovante Recebido',
+      message: `Um novo comprovante foi anexado a uma cobrança e aguarda avaliação.`
+    }).catch(e => console.warn('Notification error', e));
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -445,6 +477,18 @@ export async function rejectPayment(paymentId: string) {
       status: 'rejected',
       updatedAt: new Date().toISOString()
     });
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function deletePayment(paymentId: string) {
+  if (!isRealBackend) {
+    const idx = MOCK_PAYMENTS.findIndex(p => p.id === paymentId);
+    if (idx !== -1) MOCK_PAYMENTS.splice(idx, 1);
+    window.dispatchEvent(new Event('mockDataChanged'));
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, 'payments', paymentId));
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -549,6 +593,22 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
       safeData.photoUrl = '';
     }
     
+    // Clean up or migrate orphaned payments if familyId changed
+    if (safeData.familyId !== undefined && safeData.familyId !== userId && existing.familyId !== safeData.familyId) {
+      const oldFamilyId = existing.familyId || userId;
+      const orphanedQuery = query(collection(db, 'payments'), where('familyId', '==', oldFamilyId));
+      const orphanedSnap = await getDocs(orphanedQuery);
+      for (const d of orphanedSnap.docs) {
+        if (d.data().status === 'pending' && (!d.data().type || d.data().type === 'mensalidade')) {
+          // Delete duplicate pending
+          await deleteDoc(d.ref).catch(()=>{});
+        } else {
+          // Migrate history (approved, analyzing, rateio, doacao) to the new familyId
+          await updateDoc(d.ref, { familyId: safeData.familyId }).catch(()=>{});
+        }
+      }
+    }
+    
     await updateDoc(userRef, safeData);
     
     // Also update public_profiles
@@ -583,7 +643,7 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
   } catch(e) { handleFirestoreError(e); }
 }
 
-export function subscribeToConfig(callback: (config: AppConfig) => void) {
+export function subscribeToConfig(callback: (config: AppConfig | null) => void) {
   if (!isRealBackend) {
     callback(MOCK_CONFIG);
     return () => {};
@@ -593,14 +653,8 @@ export function subscribeToConfig(callback: (config: AppConfig) => void) {
     if (snap.exists()) {
       callback(snap.data() as AppConfig);
     } else {
-      // Default fallback
-      callback({ 
-        pixKey: 'NÃO DEFINIDA', 
-        monthlyAmount: 30,
-        dueDateDay: 10,
-        paymentInstructions: 'Nenhuma instrução definida.',
-        updatedAt: new Date().toISOString()
-      });
+      // Default fallback completely removed. It must be created by admin
+      callback(null);
     }
   }, handleFirestoreError);
 }
@@ -769,12 +823,16 @@ export async function markEventAsRead(eventId: string, userId: string) {
   } catch(e) { handleFirestoreError(e); }
 }
 
-export function subscribeToMyNotifications(userId: string, callback: (n: AppNotification[]) => void) {
+export function subscribeToMyNotifications(userId: string, role: string, callback: (n: AppNotification[]) => void) {
   if (!isRealBackend) {
-    callback(MOCK_NOTIFICATIONS.filter(n => n.userId === userId || n.userId === 'all'));
+    const targets = [userId, 'all'];
+    if (role === 'admin') targets.push('admins');
+    callback(MOCK_NOTIFICATIONS.filter(n => targets.includes(n.userId)));
     return () => {};
   }
-  const q1 = query(collection(db, 'notifications'), where('userId', 'in', [userId, 'all']));
+  const targets = [userId, 'all'];
+  if (role === 'admin') targets.push('admins');
+  const q1 = query(collection(db, 'notifications'), where('userId', 'in', targets));
   return onSnapshot(q1, snap => {
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
     docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

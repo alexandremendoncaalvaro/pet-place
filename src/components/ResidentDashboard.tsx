@@ -8,7 +8,7 @@ import { PostItem } from './PostItem';
 import { NovaDoacaoModal } from './NovaDoacaoModal';
 
 export function ResidentDashboard() {
-  const { user, myPayments, appConfig, posts, loadMorePosts, postLimit } = useApp();
+  const { user, myPayments, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
   const currentMonth = format(new Date(), 'yyyy-MM');
   const currentPayment = myPayments.find(p => p.month === currentMonth);
   const [copied, setCopied] = useState(false);
@@ -182,6 +182,16 @@ export function ResidentDashboard() {
                     </div>
                     {payment.description && (
                       <p className="text-xs text-gray-500 italic mt-1">{payment.description}</p>
+                    )}
+                    {payment.proofUrl && payment.status !== 'pending' && payment.status !== 'rejected' && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <button 
+                          onClick={() => setFullscreenImage({url: payment.proofUrl!, title: `Comprovante: ${format(parseISO(`${payment.month}-01`), 'MMMM yyyy', { locale: ptBR })}`})}
+                          className="text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg w-full transition-colors active:bg-blue-100"
+                        >
+                          Ver Comprovante
+                        </button>
+                      </div>
                     )}
                     {(payment.status === 'pending' || payment.status === 'rejected') && (
                       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">

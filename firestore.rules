@@ -78,7 +78,7 @@ service cloud.firestore {
                     && incoming().uid == request.auth.uid;
       allow update: if isOwner(profileId) && isValidId(profileId)
                     && isValidPublicProfile(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dogName', 'photoUrl', 'role'])
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dogName', 'photoUrl', 'role', 'familyId'])
                     && incoming().uid == existing().uid
                     && incoming().createdAt == existing().createdAt
                     || (isAdmin() && isValidPublicProfile(incoming()));
@@ -121,14 +121,16 @@ service cloud.firestore {
     }
 
     match /payments/{paymentId} {
-      // Residents can read their family's payments. Admins can read all.
-      allow read: if isSignedIn() && (resource.data.familyId == getUserFamilyId() || isAdmin());
+      // Todos logados leem, mas as verificações ocorrem na interface (Transparência).
+      allow read: if isSignedIn();
       
       // Residents can create payments.
       allow create: if isSignedIn() && isValidId(paymentId)
                     && isValidPayment(incoming())
-                    && incoming().familyId == getUserFamilyId()
-                    && (incoming().status == 'pending' || incoming().status == 'analyzing');
+                    && (
+                      (incoming().familyId == getUserFamilyId() && (incoming().status == 'pending' || incoming().status == 'analyzing'))
+                      || isAdmin()
+                    );
 
       // Residents can update their family's payment to attach proof ('analyzing' status).
       // Admins can approve/reject.
@@ -147,7 +149,7 @@ service cloud.firestore {
                       ||
                       (
                         isAdmin()
-                        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'proofUrl'])
                       )
                     );
                     
@@ -272,8 +274,8 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAdmin() && isValidId(notificationId) && isValidNotification(incoming());
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.userId == 'all' || resource.data.userId == 'admins' || isAdmin());
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming()) && (isAdmin() || incoming().userId == 'admins');
       // we allow user to update isRead
       allow update: if isSignedIn() && isValidId(notificationId)
                     && isValidNotification(incoming())

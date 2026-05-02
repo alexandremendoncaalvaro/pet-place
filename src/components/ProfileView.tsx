@@ -5,7 +5,7 @@ import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function ProfileView() {
-  const { user, myPets } = useApp();
+  const { user, myPets, publicProfiles } = useApp();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [userPhoto, setUserPhoto] = useState<File | null>(null);
@@ -41,6 +41,9 @@ export function ProfileView() {
     }
   };
 
+  const [confirmLeaveFamily, setConfirmLeaveFamily] = useState(false);
+  const [confirmDeletePetId, setConfirmDeletePetId] = useState<string | null>(null);
+
   const handleJoinFamily = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !familyCode.trim()) return;
@@ -63,16 +66,15 @@ export function ProfileView() {
 
   const handleLeaveFamily = async () => {
     if (!user) return;
-    if (confirm('Tem certeza que deseja sair deste grupo familiar?')) {
-      setFamilyLoading(true);
-      try {
-        await updateProfile(user.uid, { familyId: user.uid });
-        alert('Você saiu do grupo familiar.');
-      } catch (err: any) {
-        alert(`Erro ao atualizar perfil: ${err?.message || err}`);
-      } finally {
-        setFamilyLoading(false);
-      }
+    setFamilyLoading(true);
+    try {
+      await updateProfile(user.uid, { familyId: user.uid });
+      setConfirmLeaveFamily(false);
+      alert('Você saiu do grupo familiar.');
+    } catch (err: any) {
+      alert(`Erro ao atualizar perfil: ${err?.message || err}`);
+    } finally {
+      setFamilyLoading(false);
     }
   };
 
@@ -112,9 +114,8 @@ export function ProfileView() {
   };
 
   const handleDeletePet = async (id: string, pName: string) => {
-    if(confirm(`Tem certeza que deseja remover ${pName}?`)) {
-      await deletePet(id);
-    }
+    await deletePet(id);
+    setConfirmDeletePetId(null);
   };
 
   return (
@@ -136,7 +137,9 @@ export function ProfileView() {
         </div>
         <input type="file" accept="image/*" ref={userFileInputRef} onChange={e => setUserPhoto(e.target.files?.[0] || null)} className="hidden" />
         <h2 className="text-xl font-semibold text-gray-800">{user?.name}</h2>
-        <p className="text-gray-500 text-sm capitalize">{user?.role === 'admin' ? 'Administrador' : 'Pessoa'}</p>
+        {user?.role === 'admin' && (
+          <p className="text-gray-500 text-sm capitalize">Administrador</p>
+        )}
         <p className="text-gray-400 text-xs mt-1">{user?.email}</p>
       </div>
 
@@ -179,66 +182,118 @@ export function ProfileView() {
           <h3 className="font-semibold text-gray-800 text-lg">Grupo Familiar</h3>
         </div>
         
-        {(!user?.familyId || user?.familyId === user?.uid) ? (
-          <div>
-            <p className="text-sm text-gray-500 mb-4">
-              Ao vincular sua conta à de outra pessoa, vocês poderão compartilhar os pagamentos e a visão dos mesmos pets.
-            </p>
-            
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
-              <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Seu Código de Convite</span>
-              <div className="flex items-center justify-between">
-                <code className="font-mono text-sm text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">{user?.uid?.substring(0, 8)}...</code>
-                <button 
-                  type="button"
-                  onClick={() => { navigator.clipboard.writeText(user?.uid || ''); alert('Código copiado!'); }}
-                  className="text-xs text-blue-600 font-medium"
-                >
-                  COPIAR
-                </button>
-              </div>
-            </div>
+        {(() => {
+          const myFamilyMembers = publicProfiles.filter(p => (p.familyId || p.uid) === (user?.familyId || user?.uid));
+          const hasFamily = myFamilyMembers.length > 1;
+          const isFamilyOwner = !user?.familyId || user?.familyId === user?.uid;
 
-            {!showFamilyInput ? (
-              <button 
-                type="button" 
-                onClick={() => setShowFamilyInput(true)} 
-                className="w-full text-blue-600 bg-blue-50 py-3 rounded-xl font-medium active:scale-95 transition-transform"
-              >
-                Vincular a outra conta
-              </button>
-            ) : (
-              <form onSubmit={handleJoinFamily} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <label className="text-xs font-medium text-gray-500 uppercase">Código da Família</label>
-                <input 
-                  required 
-                  value={familyCode} 
-                  onChange={e => setFamilyCode(e.target.value)} 
-                  placeholder="Cole o código do responsável aqui..."
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm" 
-                />
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowFamilyInput(false)} className="flex-1 text-sm bg-gray-200 text-gray-700 py-2 rounded-xl">Cancelar</button>
-                  <button disabled={familyLoading} type="submit" className="flex-1 text-sm bg-blue-600 text-white py-2 rounded-xl disabled:opacity-50">Confirmar</button>
+          return (
+            <div className="flex flex-col gap-4">
+              {hasFamily && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-start gap-2 w-full">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                    Membros do Grupo
+                  </h4>
+                  <div className="w-full flex flex-col gap-2 mb-2">
+                    {myFamilyMembers.map(m => (
+                      <div key={m.uid} className="flex items-center gap-3 bg-white/60 p-2.5 rounded-xl border border-blue-100/50">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {m.photoUrl ? <img src={m.photoUrl} alt={m.name} className="w-full h-full object-cover" /> : <User size={16} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{m.name} {m.uid === user?.uid && '(Você)'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-blue-800 bg-blue-100/50 p-3 rounded-lg border border-blue-200/50 w-full leading-relaxed">
+                    Membros compartilham pagamentos, notificações e pets. O valor de mensalidades e rateios é gerado unicamente por <b>grupo</b>.
+                  </p>
+                  
+                  {!isFamilyOwner && (
+                    <div className="w-full mt-2">
+                      {confirmLeaveFamily ? (
+                        <div className="flex gap-2 w-full">
+                          <button 
+                            disabled={familyLoading}
+                            type="button" 
+                            onClick={() => setConfirmLeaveFamily(false)}
+                            className="flex-1 text-sm bg-white text-gray-600 font-medium border border-gray-200 py-2 rounded-xl active:scale-95 disabled:opacity-50"
+                          >Cancelar</button>
+                          <button 
+                            disabled={familyLoading}
+                            type="button" 
+                            onClick={handleLeaveFamily}
+                            className="flex-1 text-sm bg-red-50 text-red-600 font-medium border border-red-200 py-2 rounded-xl active:scale-95 disabled:opacity-50"
+                          >Sim, Sair</button>
+                        </div>
+                      ) : (
+                        <button 
+                          disabled={familyLoading}
+                          type="button" 
+                          onClick={() => setConfirmLeaveFamily(true)}
+                          className="text-sm bg-white text-red-600 font-medium border border-red-200 px-4 py-2 rounded-xl w-full active:scale-95 disabled:opacity-50"
+                        >
+                          Sair do Grupo
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </form>
-            )}
-          </div>
-        ) : (
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-start gap-2">
-            <p className="text-sm text-blue-800">
-              Você está vinculado a um grupo familiar. Os pets da sua família também aparecem para você.
-            </p>
-            <button 
-              disabled={familyLoading}
-              type="button" 
-              onClick={handleLeaveFamily}
-              className="text-sm bg-white text-red-600 font-medium border border-red-200 px-4 py-2 rounded-xl mt-2 active:scale-95 disabled:opacity-50"
-            >
-              Remover Vínculo
-            </button>
-          </div>
-        )}
+              )}
+
+              {isFamilyOwner && (
+                <div>
+                  {!hasFamily && (
+                    <p className="text-sm text-gray-500 mb-4 leading-relaxed">
+                      Ao vincular sua conta à de outra pessoa, vocês compartilharão pagamentos e pets.
+                    </p>
+                  )}
+                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Código de Convite</span>
+                    <div className="flex items-center justify-between">
+                      <code className="font-mono text-sm text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded select-all">{user?.uid?.substring(0, 8)}...</code>
+                      <button 
+                        type="button"
+                        onClick={() => { navigator.clipboard.writeText(user?.uid || ''); alert('Código copiado!'); }}
+                        className="text-xs text-blue-600 font-bold px-2 py-1 bg-blue-100 rounded-md active:scale-95"
+                      >
+                        COPIAR
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Envie seu código para outros moradores se juntarem.</p>
+                  </div>
+
+                  {!showFamilyInput && !hasFamily && (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowFamilyInput(true)} 
+                      className="w-full text-blue-600 bg-blue-50 hover:bg-blue-100 py-3 rounded-xl font-medium active:scale-95 transition-all"
+                    >
+                      Já tem um código? Vincule-se
+                    </button>
+                  )}
+                  {showFamilyInput && !hasFamily && (
+                    <form onSubmit={handleJoinFamily} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Código da Família</label>
+                      <input 
+                        required 
+                        value={familyCode} 
+                        onChange={e => setFamilyCode(e.target.value)} 
+                        placeholder="Cole o código do responsável aqui..."
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm" 
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button type="button" onClick={() => setShowFamilyInput(false)} className="flex-[0.5] text-sm bg-white border border-gray-200 text-gray-600 py-2 rounded-xl">Cancelar</button>
+                        <button disabled={familyLoading} type="submit" className="flex-1 text-sm bg-blue-600 active:bg-blue-700 text-white py-2 rounded-xl disabled:opacity-50 font-medium">Vincular</button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Pets Section */}
@@ -270,12 +325,21 @@ export function ProfileView() {
                 <p className="font-semibold text-gray-800">{p.name}</p>
                 <p className="text-xs text-gray-500">{p.breed || 'Sem raça'}</p>
               </div>
-              <button type="button" onClick={() => startEditPet(p)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
-                <Edit2 size={18} />
-              </button>
-              <button type="button" onClick={() => handleDeletePet(p.id, p.name)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                <Trash2 size={18} />
-              </button>
+              {confirmDeletePetId === p.id ? (
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => setConfirmDeletePetId(null)} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg">Cancelar</button>
+                  <button type="button" onClick={() => handleDeletePet(p.id, p.name)} className="px-2 py-1 text-xs bg-red-500 text-white rounded-lg">Excluir</button>
+                </div>
+              ) : (
+                <>
+                  <button type="button" onClick={() => startEditPet(p)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
+                    <Edit2 size={18} />
+                  </button>
+                  <button type="button" onClick={() => setConfirmDeletePetId(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                    <Trash2 size={18} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>

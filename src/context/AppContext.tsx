@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
 import { 
   initFirebase, 
@@ -13,7 +13,6 @@ import {
   subscribeToAllPublicProfiles,
   subscribeToAllPets,
   subscribeToConfig,
-  subscribeToMyPets,
   subscribeToAllEvents,
   subscribeToMyNotifications,
   subscribeToAllPosts,
@@ -61,8 +60,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [publicProfiles, setPublicProfiles] = useState<UserProfile[]>([]);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-  const [myPets, setMyPets] = useState<Pet[]>([]);
   const [allPets, setAllPets] = useState<Pet[]>([]);
+  
+  const myPets = useMemo(() => {
+    if (!user) return [];
+    const famId = user.familyId || user.uid;
+    const famMembers = publicProfiles.filter(p => (p.familyId || p.uid) === famId);
+    return allPets.filter(p => famMembers.some(m => p.ownerId === m.uid) || p.ownerId === user.uid);
+  }, [user, allPets, publicProfiles]);
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
   const [posts, setPosts] = useState<AppPost[]>([]);
@@ -93,7 +98,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let unsubPublicProfiles: () => void;
     let unsubAllPets: () => void;
     let unsubConfig: () => void;
-    let unsubPets: () => void;
     let unsubEvents: () => void;
     let unsubNotifs: () => void;
 
@@ -108,13 +112,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           requestPushToken(u.uid);
           ensureCurrentMonthPayment(fid); // This might use hardcoded 30 internally, we can fix later
           unsubMyPayments = subscribeToMyPayments(fid, setMyPayments);
-          unsubPets = subscribeToMyPets(u.uid, setMyPets);
-          unsubNotifs = subscribeToMyNotifications(u.uid, setMyNotifications);
+          unsubNotifs = subscribeToMyNotifications(u.uid, u.role, setMyNotifications);
           unsubAllExpenses = subscribeToAllExpenses(setAllExpenses);
           unsubPublicProfiles = subscribeToAllPublicProfiles(setPublicProfiles);
           unsubAllPets = subscribeToAllPets(setAllPets);
+          unsubAllPayments = subscribeToAllPayments(setAllPayments);
           if (u.role === 'admin') {
-            unsubAllPayments = subscribeToAllPayments(setAllPayments);
             unsubAllUsers = subscribeToAllUsers(setAllUsers);
           }
         } else {
@@ -123,7 +126,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAllExpenses([]);
           setAllUsers([]);
           setPublicProfiles([]);
-          setMyPets([]);
           setAllPets([]);
           setMyNotifications([]);
         }
@@ -139,7 +141,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (unsubPublicProfiles) unsubPublicProfiles();
       if (unsubAllPets) unsubAllPets();
       if (unsubConfig) unsubConfig();
-      if (unsubPets) unsubPets();
       if (unsubEvents) unsubEvents();
       if (unsubNotifs) unsubNotifs();
     };
