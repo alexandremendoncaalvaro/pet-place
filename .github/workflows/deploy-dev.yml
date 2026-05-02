@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - development
       - dev
       - develop
 
@@ -60,7 +61,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy Pages proxy
-        run: npx wrangler pages deploy pages-proxy-dev --project-name pet-place-dev --branch dev
+        run: npx wrangler pages deploy pages-proxy-dev --project-name pet-place-dev --branch development
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Smoke test
+        run: npm run smoke:dev
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
