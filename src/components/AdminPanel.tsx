@@ -584,6 +584,7 @@ function SettingsForm() {
 const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payment, userName }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useAdminFeedback();
+  const { setFullscreenImage } = useApp();
 
   const handleAction = async (action: 'approve' | 'reject') => {
     try {
@@ -615,7 +616,21 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
         </span>
       </div>
       
-      <ImageWithSkeleton src={payment.proofUrl} alt="Comprovante" className="w-full h-48 object-cover border border-gray-100" containerClassName="w-full h-48 rounded-2xl mb-4 overflow-hidden" />
+      {payment.proofUrl && (
+        <button
+          type="button"
+          onClick={() => setFullscreenImage({ url: payment.proofUrl!, title: `Comprovante: ${userName || 'Pagamento'}` })}
+          className="w-full h-48 rounded-2xl mb-4 overflow-hidden block text-left transition-transform active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="Abrir comprovante em tela cheia"
+        >
+          <ImageWithSkeleton
+            src={payment.proofUrl}
+            alt="Comprovante"
+            className="w-full h-48 object-cover border border-gray-100 cursor-zoom-in"
+            containerClassName="w-full h-48 rounded-2xl overflow-hidden"
+          />
+        </button>
+      )}
       
       <div className="flex gap-2">
         <button 
