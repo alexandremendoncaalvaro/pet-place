@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import { Button, Card } from './ui';
 
 type ToastVariant = 'success' | 'error' | 'info';
 
@@ -74,28 +75,26 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
 
       {confirmState && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6 pt-16 backdrop-blur-sm sm:items-center sm:pb-16">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
+          <Card className="w-full max-w-sm p-5 shadow-xl">
             <h3 className="text-base font-semibold text-gray-900">{confirmState.title}</h3>
             {confirmState.message && <p className="mt-2 text-sm leading-relaxed text-gray-500">{confirmState.message}</p>}
             <div className="mt-5 flex gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => closeConfirm(false)}
-                className="flex-1 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700 active:bg-gray-200"
+                className="flex-1"
               >
                 {confirmState.cancelLabel || 'Cancelar'}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={confirmState.variant === 'danger' ? 'danger' : 'primary'}
                 onClick={() => closeConfirm(true)}
-                className={`flex-1 rounded-2xl px-4 py-3 text-sm font-medium text-white ${
-                  confirmState.variant === 'danger' ? 'bg-red-600 active:bg-red-700' : 'bg-gray-900 active:bg-black'
-                }`}
+                className={confirmState.variant === 'danger' ? 'flex-1 bg-danger-600 text-white hover:bg-red-700' : 'flex-1'}
               >
                 {confirmState.confirmLabel || 'Confirmar'}
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </FeedbackContext.Provider>

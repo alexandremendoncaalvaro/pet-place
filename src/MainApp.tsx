@@ -11,6 +11,7 @@ import { DirectoryView } from './components/DirectoryView';
 import { GlobalModals } from './components/GlobalModals';
 import { CreatePostModal } from './components/CreatePostModal';
 import { Plus } from 'lucide-react';
+import { Button, IconButton } from './components/ui';
 
 export function MainApp() {
   const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications } = useApp();
@@ -89,13 +90,13 @@ export function MainApp() {
   const unreadCount = myNotifications?.filter(n => !n.isRead).length || 0;
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 pb-20">
+    <div className="flex flex-col min-h-screen bg-ink-50 pb-20">
       {/* Header */}
-      <header className="bg-white px-6 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+      <header className="bg-white px-6 py-4 border-b border-ink-100 flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => setActiveTab('perfil')}
-            className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold uppercase overflow-hidden border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 active:scale-95 transition-transform"
+            className="w-10 h-10 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center font-bold uppercase overflow-hidden border border-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500 active:scale-95 transition-transform"
             aria-label="Meu Perfil"
           >
             {user.photoUrl ? (
@@ -105,26 +106,26 @@ export function MainApp() {
             )}
           </button>
           <div className="flex flex-col">
-            <h1 className="font-semibold text-gray-800 leading-tight">Olá, {user.name.split(' ')[0]}</h1>
+            <h1 className="font-semibold text-ink-900 leading-tight">Olá, {user.name.split(' ')[0]}</h1>
             {user.role === 'admin' && (
-              <span className="text-xs text-gray-400">Admin</span>
+              <span className="text-xs text-ink-400">Admin</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button 
+          <IconButton
             onClick={() => setActiveTab('mural')}
-            className="p-2 text-gray-400 hover:text-blue-600 active:scale-95 relative"
+            className="text-ink-400 hover:text-brand-600 relative"
             aria-label="Avisos"
           >
-            <Bell size={20} className={unreadCount > 0 ? 'text-blue-600' : ''} />
+            <Bell size={20} className={unreadCount > 0 ? 'text-brand-600' : ''} />
             {unreadCount > 0 && (
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
             )}
-          </button>
-          <button onClick={logout} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 active:scale-95" aria-label="Sair">
+          </IconButton>
+          <IconButton onClick={logout} className="-mr-2 text-ink-400 hover:text-ink-700" aria-label="Sair">
             <LogOut size={20} />
-          </button>
+          </IconButton>
         </div>
       </header>
 
@@ -139,7 +140,7 @@ export function MainApp() {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white border-t border-gray-100 fixed bottom-0 left-0 w-full z-20 px-2 sm:px-6 py-2 pb-safe flex justify-around items-center">
+      <nav className="bg-white border-t border-ink-100 fixed bottom-0 left-0 w-full z-20 px-2 sm:px-6 py-2 pb-safe flex justify-around items-center">
         <NavItem 
           active={activeTab === 'home'} 
           onClick={() => setActiveTab('home')} 
@@ -181,16 +182,16 @@ export function MainApp() {
 
       {/* Dev toggle */}
       {!isRealBackend && (
-        <button onClick={toggleMockRole} className="fixed text-xs bottom-28 right-4 bg-black/80 text-white px-3 py-1.5 rounded-full z-50">
+        <Button onClick={toggleMockRole} size="sm" className="fixed bottom-28 right-4 z-50 bg-ink-900 text-white">
           Trocar Papel Demo
-        </button>
+        </Button>
       )}
 
       {/* Floating Action Button for Posting */}
       {activeTab === 'home' && (
-        <button 
+        <button
           onClick={() => setShowCreatePost(true)}
-          className="fixed bottom-[80px] sm:bottom-24 right-4 sm:right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-90 z-20"
+          className="fixed bottom-[80px] sm:bottom-24 right-4 sm:right-6 bg-brand-600 hover:bg-brand-700 text-white w-14 h-14 rounded-full shadow-lg shadow-brand-600/30 flex items-center justify-center transition-transform active:scale-90 z-20"
           aria-label="Nova publicação"
         >
           <Plus size={28} />
@@ -209,7 +210,7 @@ function NavItem({ active, onClick, icon, label }: { active: boolean, onClick: (
       onClick={onClick}
       className={cn(
         "flex flex-col items-center justify-center p-2 min-w-[64px] transition-colors active:scale-95 touch-manipulation",
-        active ? "text-blue-600" : "text-gray-400"
+        active ? "text-brand-600" : "text-ink-400"
       )}
     >
       <div className={cn("mb-1", active && "animate-bounce")}>{icon}</div>
