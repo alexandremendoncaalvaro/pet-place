@@ -32,6 +32,7 @@ interface CurrentUser {
   email: string;
   familyId?: string;
   userStatus: 'pending' | 'active' | 'blocked';
+  isOffline?: boolean;
   createdAt: string;
 }
 
@@ -118,6 +119,18 @@ async function routeUsersApi(path: string, method: string, request: Request, env
     requireAdmin(user);
     return json({ users: await listUsers(env) });
   }
+  if (path === '/users/offline' && method === 'POST') {
+    requireAdmin(user);
+    return createOfflineUserRoute(request, env);
+  }
+  if (path === '/identity-link-suggestions' && method === 'GET') {
+    requireAdmin(user);
+    return json({ suggestions: await listIdentityLinkSuggestions(env) });
+  }
+  if (path.match(/^\/identity-link-suggestions\/[^/]+$/) && method === 'PATCH') {
+    requireAdmin(user);
+    return updateIdentityLinkSuggestionRoute(request, env, user, path.split('/')[2]);
+  }
   if (path === '/public-profiles' && method === 'GET') return json({ profiles: await listPublicProfiles(env) });
   if (path.match(/^\/users\/[^/]+$/) && method === 'PATCH') return updateUserRoute(request, env, user, path.split('/')[2]);
   if (path.match(/^\/users\/[^/]+$/) && method === 'DELETE') {
@@ -134,6 +147,10 @@ async function routePaymentsApi(path: string, method: string, request: Request, 
   if (path === '/payments/charges' && method === 'POST') {
     requireAdmin(user);
     return createChargesRoute(request, env);
+  }
+  if (path === '/payments/manual' && method === 'POST') {
+    requireAdmin(user);
+    return createManualPaymentRoute(request, env, user);
   }
   if (path === '/payments/donation' && method === 'POST') return submitDonationRoute(request, env, user);
   if (path.match(/^\/payments\/[^/]+\/proof$/) && method === 'POST') return uploadProofRoute(request, env, user, path.split('/')[2]);
@@ -367,6 +384,7 @@ function rowToUser(row: any): CurrentUser {
     email: row.email || '',
     ...(row.family_id ? { familyId: row.family_id } : {}),
     userStatus: row.user_status || 'pending',
+    isOffline: !!row.is_offline,
     createdAt: row.created_at,
   };
 }
@@ -378,12 +396,36 @@ async function listUsers(env: Env): Promise<CurrentUser[]> {
 
 async function listPublicProfiles(env: Env): Promise<CurrentUser[]> {
   const rows = await env.DB.prepare(`
-    SELECT id, name, '' phone, dog_name, photo_key, photo_url, role, email, family_id, user_status, created_at
+    SELECT id, name, '' phone, dog_name, photo_key, photo_url, role, email, family_id, user_status, is_offline, created_at
     FROM users
     WHERE user_status != 'blocked'
     ORDER BY name COLLATE NOCASE
   `).all<any>();
   return (rows.results || []).map(rowToUser);
+}
+
+async function createOfflineUserRoute(request: Request, env: Env): Promise<Response> {
+  const data = await request.json<{ name?: string; phone?: string; dogName?: string }>();
+  const name = String(data.name || '').trim();
+  const phone = normalizePhoneBR(data.phone);
+  if (!name) return bad('Nome obrigatorio.', 400);
+  if (!phone || phone.length < 10) return bad('Telefone brasileiro obrigatorio.', 400);
+
+  const existing = await env.DB.prepare(`
+    SELECT * FROM users
+    WHERE phone = ? AND is_offline = 1 AND user_status != 'blocked'
+    LIMIT 1
+  `).bind(phone).first<any>();
+  if (existing) return json({ user: rowToUser(existing), reused: true });
+
+  const id = newId('offline');
+  const timestamp = now();
+  await env.DB.prepare(`
+    INSERT INTO users (id, google_sub, name, phone, dog_name, photo_url, role, email, user_status, is_offline, created_at, updated_at)
+    VALUES (?, NULL, ?, ?, ?, '', 'resident', ?, 'active', 1, ?, ?)
+  `).bind(id, name, phone, String(data.dogName || ''), `offline+${id}@pet-place.local`, timestamp, timestamp).run();
+
+  return json({ user: await getUser(env, id) }, 201);
 }
 
 async function updateUserRoute(request: Request, env: Env, user: CurrentUser, userId: string): Promise<Response> {
@@ -419,7 +461,100 @@ async function updateUserRoute(request: Request, env: Env, user: CurrentUser, us
     now(),
     userId,
   ).run();
-  return json({ user: await getUser(env, userId) });
+  const updated = await getUser(env, userId);
+  if (updated && !updated.isOffline && updated.phone && updated.phone !== existing.phone) {
+    await createPhoneLinkSuggestions(env, updated);
+  }
+  return json({ user: updated });
+}
+
+async function createPhoneLinkSuggestions(env: Env, source: CurrentUser): Promise<void> {
+  const rows = await env.DB.prepare(`
+    SELECT * FROM users
+    WHERE phone = ? AND is_offline = 1 AND user_status != 'blocked' AND id != ?
+  `).bind(source.phone, source.uid).all<any>();
+  const targets = rows.results || [];
+  if (!targets.length) return;
+
+  const timestamp = now();
+  const statements = targets.map((target) => env.DB.prepare(`
+    INSERT OR IGNORE INTO identity_link_suggestions (id, source_user_id, target_user_id, phone, status, created_at)
+    VALUES (?, ?, ?, ?, 'pending', ?)
+  `).bind(newId('link'), source.uid, target.id, source.phone, timestamp));
+  await env.DB.batch(statements);
+  await insertNotification(env, 'admins', 'Sugestao de vinculo', `${source.name} informou um telefone que bate com ${targets.length} cadastro(s) offline.`);
+}
+
+async function listIdentityLinkSuggestions(env: Env): Promise<any[]> {
+  const rows = await env.DB.prepare(`
+    SELECT s.*,
+      source.name AS source_name,
+      source.phone AS source_phone,
+      target.name AS target_name,
+      target.phone AS target_phone
+    FROM identity_link_suggestions s
+    JOIN users source ON source.id = s.source_user_id
+    JOIN users target ON target.id = s.target_user_id
+    ORDER BY s.created_at DESC
+    LIMIT 100
+  `).all<any>();
+  return (rows.results || []).map((row) => ({
+    id: row.id,
+    sourceUserId: row.source_user_id,
+    sourceName: row.source_name || '',
+    sourcePhone: row.source_phone || '',
+    targetUserId: row.target_user_id,
+    targetName: row.target_name || '',
+    targetPhone: row.target_phone || '',
+    phone: row.phone || '',
+    status: row.status,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at || undefined,
+  }));
+}
+
+async function updateIdentityLinkSuggestionRoute(request: Request, env: Env, user: CurrentUser, suggestionId: string): Promise<Response> {
+  const body = await request.json<{ status: 'approved' | 'rejected' }>();
+  if (!['approved', 'rejected'].includes(body.status)) return bad('Status invalido.', 400);
+  const suggestion = await env.DB.prepare('SELECT * FROM identity_link_suggestions WHERE id = ?').bind(suggestionId).first<any>();
+  if (!suggestion) return bad('Sugestao nao encontrada.', 404);
+  if (suggestion.status !== 'pending') return bad('Sugestao ja resolvida.', 409);
+
+  if (body.status === 'approved') {
+    const source = await getUser(env, suggestion.source_user_id);
+    const target = await getUser(env, suggestion.target_user_id);
+    if (!source || !target) return bad('Usuarios do vinculo nao encontrados.', 404);
+    const sourceFamily = familyId(source);
+    const targetFamily = familyId(target);
+    await env.DB.batch([
+      env.DB.prepare('UPDATE payments SET family_id = ?, updated_at = ? WHERE family_id = ?').bind(sourceFamily, now(), targetFamily),
+      env.DB.prepare('UPDATE pets SET owner_id = ? WHERE owner_id = ?').bind(source.uid, target.uid),
+      env.DB.prepare('UPDATE users SET dog_name = CASE WHEN dog_name = "" THEN ? ELSE dog_name END, updated_at = ? WHERE id = ?').bind(target.dogName || '', now(), source.uid),
+      env.DB.prepare('UPDATE users SET user_status = "blocked", updated_at = ? WHERE id = ?').bind(now(), target.uid),
+    ]);
+    await env.DB.prepare(`
+      DELETE FROM payments
+      WHERE family_id = ?
+        AND type = 'mensalidade'
+        AND status IN ('pending', 'rejected')
+        AND EXISTS (
+          SELECT 1 FROM payments approved
+          WHERE approved.family_id = payments.family_id
+            AND approved.month = payments.month
+            AND approved.type = 'mensalidade'
+            AND approved.status = 'approved'
+            AND approved.id != payments.id
+        )
+    `).bind(sourceFamily).run();
+  }
+
+  await env.DB.prepare(`
+    UPDATE identity_link_suggestions
+    SET status = ?, resolved_at = ?, resolved_by = ?
+    WHERE id = ?
+  `).bind(body.status, now(), user.uid, suggestionId).run();
+
+  return json({ ok: true });
 }
 
 async function deleteUser(env: Env, userId: string): Promise<void> {
@@ -539,6 +674,50 @@ async function submitDonationRoute(request: Request, env: Env, user: CurrentUser
   `).bind(id, targetFamilyId, timestamp.slice(0, 7), Number(form.get('amount') || 0), proofKey, timestamp, timestamp).run();
   await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${Number(form.get('amount') || 0).toFixed(2)} aguarda análise.`);
   return json({ payment: (await listPayments(env, targetFamilyId)).find((p) => p.id === id) });
+}
+
+async function createManualPaymentRoute(request: Request, env: Env, _user: CurrentUser): Promise<Response> {
+  const form = await request.formData();
+  const file = form.get('file');
+  if (!(file instanceof File)) return bad('Comprovante ausente.', 400);
+
+  const familyIdValue = String(form.get('familyId') || '');
+  const amount = Number(form.get('amount') || 0);
+  const month = String(form.get('month') || now().slice(0, 7));
+  const type = String(form.get('type') || 'mensalidade');
+  const description = String(form.get('description') || '').trim() || null;
+  if (!familyIdValue) return bad('Pessoa obrigatoria.', 400);
+  if (!amount || amount <= 0) return bad('Valor invalido.', 400);
+  if (!['mensalidade', 'doacao', 'rateio'].includes(type)) return bad('Tipo invalido.', 400);
+
+  const timestamp = now();
+  const proofKey = await putFile(env, 'proofs', file);
+  let paymentId = newId(type === 'doacao' ? 'donation' : 'pay');
+
+  if (type === 'mensalidade') {
+    const existing = await env.DB.prepare(`
+      SELECT id FROM payments
+      WHERE family_id = ? AND month = ? AND type = 'mensalidade'
+      ORDER BY created_at ASC
+      LIMIT 1
+    `).bind(familyIdValue, month).first<any>();
+    if (existing) {
+      paymentId = existing.id;
+      await env.DB.prepare(`
+        UPDATE payments
+        SET amount = ?, proof_key = ?, proof_url = '', status = 'approved', description = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(amount, proofKey, description, timestamp, paymentId).run();
+      return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) });
+    }
+  }
+
+  await env.DB.prepare(`
+    INSERT INTO payments (id, family_id, month, amount, proof_key, proof_url, status, type, description, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, '', 'approved', ?, ?, ?, ?)
+  `).bind(paymentId, familyIdValue, month, amount, proofKey, type, description, timestamp, timestamp).run();
+
+  return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) }, 201);
 }
 
 async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, paymentId: string): Promise<Response> {
@@ -1019,7 +1198,7 @@ async function sendWebPush(env: Env, row: any): Promise<void> {
 }
 
 async function backup(env: Env): Promise<Record<string, unknown[]>> {
-  const tables = ['users', 'settings', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions'];
+  const tables = ['users', 'settings', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions', 'identity_link_suggestions'];
   const out: Record<string, unknown[]> = {};
   for (const table of tables) {
     const res = await env.DB.prepare(`SELECT * FROM ${table}`).all();

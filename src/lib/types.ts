@@ -11,6 +11,7 @@ export interface UserProfile {
   email: string;
   familyId?: string;
   userStatus?: 'pending' | 'active' | 'blocked';
+  isOffline?: boolean;
   createdAt: string;
 }
 
@@ -98,4 +99,18 @@ export interface AppNotification {
   message: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface IdentityLinkSuggestion {
+  id: string;
+  sourceUserId: string;
+  sourceName: string;
+  sourcePhone: string;
+  targetUserId: string;
+  targetName: string;
+  targetPhone: string;
+  phone: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  resolvedAt?: string;
 }
