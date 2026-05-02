@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
 import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function ProfileView() {
   const { user, myPets } = useApp();
@@ -122,9 +123,9 @@ export function ProfileView() {
         <div className="relative mb-4 group cursor-pointer" onClick={() => userFileInputRef.current?.click()}>
           <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-bold uppercase overflow-hidden border-2 border-white shadow-sm ring-2 ring-gray-100">
             {userPhoto ? (
-              <img src={URL.createObjectURL(userPhoto)} alt="preview" className="w-full h-full object-cover" />
+              <ImageWithSkeleton src={URL.createObjectURL(userPhoto)} alt="preview" className="w-full h-full object-cover" containerClassName="w-full h-full" />
             ) : user?.photoUrl ? (
-              <img src={user.photoUrl} alt="preview" className="w-full h-full object-cover" />
+              <ImageWithSkeleton src={user.photoUrl} alt="preview" className="w-full h-full object-cover" containerClassName="w-full h-full" />
             ) : (
               user?.name.charAt(0) || 'U'
             )}
@@ -260,7 +261,7 @@ export function ProfileView() {
             <div key={p.id} className="flex items-center gap-4 bg-gray-50 p-3 rounded-2xl border border-gray-100">
               <div className="w-12 h-12 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex justify-center items-center">
                 {p.photoUrl ? (
-                  <img src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
+                  <ImageWithSkeleton src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" containerClassName="w-full h-full" />
                 ) : (
                   <span className="text-xl text-gray-400 text-center w-full">🐾</span>
                 )}

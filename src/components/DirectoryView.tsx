@@ -5,6 +5,7 @@ import { UserProfile, Pet } from '../lib/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PostItem } from './PostItem';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function DirectoryView() {
   const { publicProfiles, allPets, setViewProfileId, setViewPetId } = useApp();
@@ -91,7 +92,7 @@ export function DirectoryView() {
                     className={`w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300 ${profile.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                   >
                     {profile.photoUrl ? (
-                      <img src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" />
+                      <ImageWithSkeleton src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" containerClassName="w-full h-full" />
                     ) : (
                       <User size={32} />
                     )}
@@ -136,7 +137,7 @@ export function DirectoryView() {
                       className={`w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5 ${pet.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                     >
                       {pet.photoUrl ? (
-                        <img src={pet.photoUrl} alt={pet.name} className="w-full h-full object-cover rounded-full" />
+                        <ImageWithSkeleton src={pet.photoUrl} alt={pet.name} className="w-full h-full object-cover rounded-full" containerClassName="w-full h-full rounded-full" />
                       ) : (
                         <PawPrint size={30} />
                       )}

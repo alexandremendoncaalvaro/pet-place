@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send } from 'lucide-react';
 import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData } from '../services/api';
 import { Payment } from '../lib/types';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function AdminPanel() {
   const { allPayments, allUsers, appConfig } = useApp();
@@ -251,7 +252,7 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
         </span>
       </div>
       
-      <img src={payment.proofUrl} alt="Comprovante" className="w-full h-48 object-cover rounded-2xl mb-4 border border-gray-100" />
+      <ImageWithSkeleton src={payment.proofUrl} alt="Comprovante" className="w-full h-48 object-cover border border-gray-100" containerClassName="w-full h-48 rounded-2xl mb-4 overflow-hidden" />
       
       <div className="flex gap-2">
         <button 

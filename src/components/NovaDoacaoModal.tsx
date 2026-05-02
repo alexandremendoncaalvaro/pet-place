@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, Heart, UploadCloud } from 'lucide-react';
 import { submitDonation } from '../services/api';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
   const { user } = useApp();
@@ -57,7 +58,7 @@ export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Comprovante PIX</label>
             {file ? (
               <div className="relative border border-gray-200 rounded-2xl overflow-hidden aspect-video bg-gray-50 flex items-center justify-center">
-                <img src={URL.createObjectURL(file)} alt="Comprovante" className="max-w-full max-h-full object-contain" />
+                <ImageWithSkeleton src={URL.createObjectURL(file)} alt="Comprovante" className="max-w-full max-h-full object-contain" containerClassName="w-full h-full flex justify-center items-center" />
                 <button 
                   type="button"
                   onClick={() => setFile(null)} 

@@ -5,6 +5,7 @@ import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X } from 'lucid
 import { useApp } from '../context/AppContext';
 import { AppPost, PostComment } from '../lib/types';
 import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment } from '../services/api';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const { user, publicProfiles, allPets, isAdmin, setViewProfileId, setViewPetId, setFullscreenImage } = useApp();
@@ -17,6 +18,8 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [isDeletingOverlay, setIsDeletingOverlay] = useState(false);
   const [isPerformingDelete, setIsPerformingDelete] = useState(false);
   const [editContent, setEditContent] = useState(post.content);
+  const [editTags, setEditTags] = useState<string[]>(post.tags || []);
+  const [showEditTagsSelector, setShowEditTagsSelector] = useState(false);
 
   // Comments
   const [showComments, setShowComments] = useState(false);
@@ -46,9 +49,10 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const handleEdit = async () => {
     if (!editContent.trim()) return;
     setIsSavingEdit(true);
-    await updatePost(post.id, editContent, post.tags || []);
+    await updatePost(post.id, editContent, editTags);
     setIsSavingEdit(false);
     setIsEditing(false);
+    setShowEditTagsSelector(false);
   };
   
   const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
@@ -70,7 +74,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
       <div className="p-4 flex items-center gap-3 relative">
         <button className="flex-shrink-0 relative outline-none focus:ring-2 focus:ring-blue-500 rounded-full hover:opacity-90 active:scale-95 transition-all" onClick={() => author && setViewProfileId(author.uid)}>
-          <img src={author?.photoUrl || `https://ui-avatars.com/api/?name=${author?.name || 'User'}&background=random`} alt={author?.name} className="w-10 h-10 rounded-full object-cover" />
+          <ImageWithSkeleton src={author?.photoUrl || `https://ui-avatars.com/api/?name=${author?.name || 'User'}&background=random`} alt={author?.name} className="w-10 h-10 rounded-full object-cover" containerClassName="w-10 h-10 rounded-full" />
         </button>
         <div className="flex-1 cursor-pointer" onClick={() => author && setViewProfileId(author.uid)}>
           <h3 className="text-sm font-semibold text-gray-800 hover:text-blue-600 transition-colors">{author?.name || 'Morador'}</h3>
@@ -123,8 +127,8 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
             <video src={post.mediaUrl} className="w-full h-full object-cover" controls muted playsInline />
           ) : (
             <>
-               <img src={post.mediaUrl} alt="Post media" className="w-full h-full object-cover" />
-               <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+               <ImageWithSkeleton src={post.mediaUrl} alt="Post media" className="w-full h-full object-cover" containerClassName="w-full h-full" />
+               <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
             </>
           )}
         </div>
@@ -150,15 +154,53 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
             <textarea 
               value={editContent}
               onChange={e => setEditContent(e.target.value)}
-              className="w-full text-sm border rounded-xl p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full text-sm border rounded-xl p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
               rows={3}
               disabled={isSavingEdit}
             />
-            <div className="flex justify-end gap-2 mt-2">
-              <button disabled={isSavingEdit} onClick={() => { setIsEditing(false); setEditContent(post.content); }} className="text-xs px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-50">Cancelar</button>
-              <button disabled={isSavingEdit} onClick={handleEdit} className="text-xs px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
-                {isSavingEdit ? 'Salvando...' : 'Salvar'}
+            {showEditTagsSelector && (
+              <div className="mt-2 p-3 border rounded-xl border-blue-100 bg-blue-50/50">
+                <h4 className="text-xs font-semibold text-blue-800 uppercase tracking-wider mb-2">Marcar / Desmarcar</h4>
+                <div className="flex flex-wrap gap-2">
+                  {[...publicProfiles, ...allPets].filter(p => !('uid' in p) || p.uid !== user?.uid).map(entity => {
+                    const id = 'uid' in entity ? entity.uid : (entity as any).id;
+                    const name = 'name' in entity ? entity.name : '';
+                    const isSelected = editTags.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          if (isSelected) setEditTags(editTags.filter(t => t !== id));
+                          else setEditTags([...editTags, id]);
+                        }}
+                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        @{name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-between items-center mt-2">
+              <button 
+                disabled={isSavingEdit} 
+                onClick={() => setShowEditTagsSelector(!showEditTagsSelector)} 
+                className={`text-xs px-3 py-1.5 rounded-lg transition-colors font-medium border ${showEditTagsSelector || editTags.length > 0 ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              >
+                Marcar amigos ({editTags.length})
               </button>
+              <div className="flex gap-2">
+                <button disabled={isSavingEdit} onClick={() => { 
+                  setIsEditing(false); 
+                  setEditContent(post.content); 
+                  setEditTags(post.tags || []);
+                  setShowEditTagsSelector(false);
+                }} className="text-xs px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-50 font-medium">Cancelar</button>
+                <button disabled={isSavingEdit} onClick={handleEdit} className="text-xs px-4 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 font-medium">
+                  {isSavingEdit ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
             </div>
           </div>
         ) : (

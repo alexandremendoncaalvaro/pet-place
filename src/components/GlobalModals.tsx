@@ -1,7 +1,8 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { X, User, Users, PawPrint, ImageIcon } from 'lucide-react';
+import { X, User, Users, PawPrint, Image as ImageIcon } from 'lucide-react';
 import { PostItem } from './PostItem';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function GlobalModals() {
   const { 
@@ -40,10 +41,11 @@ export function GlobalModals() {
             <X size={24} />
           </button>
           <div className="max-w-4xl w-full max-h-[90vh] flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
-            <img 
+            <ImageWithSkeleton 
               src={fullscreenImage.url} 
               alt={fullscreenImage.title} 
               className="max-w-full max-h-[85vh] object-contain rounded-lg"
+              containerClassName="w-full max-h-[85vh] flex justify-center"
             />
             {fullscreenImage.title && <p className="text-white font-medium bg-black/50 px-4 py-2 rounded-full">{fullscreenImage.title}</p>}
           </div>

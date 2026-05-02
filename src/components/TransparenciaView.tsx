@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Receipt } from 'lucide-react';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 export function TransparenciaView() {
   const { allPayments, allExpenses, isRealBackend } = useApp();
@@ -60,7 +61,7 @@ export function TransparenciaView() {
                     Ver Nota Fiscal
                   </span>
                   {/* On click could open a modal, keeping it simple as an image for now */}
-                  <img src={expense.receiptUrl} alt="Nota" className="mt-2 rounded-xl h-32 object-cover w-full opacity-90 border border-gray-100" />
+                  <ImageWithSkeleton src={expense.receiptUrl} alt="Nota" className="mt-2 rounded-xl h-32 object-cover w-full opacity-90 border border-gray-100" containerClassName="w-full mt-2 h-32" />
                 </div>
               )}
             </div>

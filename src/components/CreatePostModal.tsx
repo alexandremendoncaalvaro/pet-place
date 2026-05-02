@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign, Send } from 'lucide-react';
 import { addPost } from '../services/api';
+import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 interface CreatePostModalProps {
   onClose: () => void;
@@ -59,7 +60,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
         <div className="flex-1 overflow-y-auto p-4 hide-scrollbar">
           <div className="flex gap-3">
-            <img src={user?.photoUrl || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
+            <ImageWithSkeleton src={user?.photoUrl || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-10 h-10 rounded-full object-cover shrink-0" containerClassName="w-10 h-10 shrink-0 rounded-full" />
             <div className="flex-1">
               <textarea 
                 autoFocus
@@ -74,7 +75,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
                   {postFile.type.startsWith('video/') ? (
                     <video src={URL.createObjectURL(postFile)} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop />
                   ) : (
-                    <img src={URL.createObjectURL(postFile)} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-gray-100" />
+                    <ImageWithSkeleton src={URL.createObjectURL(postFile)} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-gray-100" containerClassName="w-full max-h-[40vh]" />
                   )}
                   <button 
                     onClick={() => setPostFile(null)} 
