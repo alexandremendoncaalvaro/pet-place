@@ -10,6 +10,8 @@ import {
   subscribeToAllPayments,
   subscribeToAllExpenses,
   subscribeToAllUsers,
+  subscribeToAllPublicProfiles,
+  subscribeToAllPets,
   subscribeToConfig,
   subscribeToMyPets,
   subscribeToAllEvents,
@@ -25,8 +27,10 @@ interface AppState {
   allPayments: Payment[];
   allExpenses: Expense[];
   allUsers: UserProfile[];
+  publicProfiles: UserProfile[];
   appConfig: AppConfig | null;
   myPets: Pet[];
+  allPets: Pet[];
   events: AppEvent[];
   myNotifications: AppNotification[];
   login: () => Promise<void>;
@@ -44,8 +48,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [publicProfiles, setPublicProfiles] = useState<UserProfile[]>([]);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [myPets, setMyPets] = useState<Pet[]>([]);
+  const [allPets, setAllPets] = useState<Pet[]>([]);
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
 
@@ -55,6 +61,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let unsubAllPayments: () => void;
     let unsubAllExpenses: () => void;
     let unsubAllUsers: () => void;
+    let unsubPublicProfiles: () => void;
+    let unsubAllPets: () => void;
     let unsubConfig: () => void;
     let unsubPets: () => void;
     let unsubEvents: () => void;
@@ -72,6 +80,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           unsubPets = subscribeToMyPets(u.uid, setMyPets);
           unsubNotifs = subscribeToMyNotifications(u.uid, setMyNotifications);
           unsubAllExpenses = subscribeToAllExpenses(setAllExpenses);
+          unsubPublicProfiles = subscribeToAllPublicProfiles(setPublicProfiles);
+          unsubAllPets = subscribeToAllPets(setAllPets);
           if (u.role === 'admin') {
             unsubAllPayments = subscribeToAllPayments(setAllPayments);
             unsubAllUsers = subscribeToAllUsers(setAllUsers);
@@ -81,7 +91,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAllPayments([]);
           setAllExpenses([]);
           setAllUsers([]);
+          setPublicProfiles([]);
           setMyPets([]);
+          setAllPets([]);
           setMyNotifications([]);
         }
       });
@@ -93,6 +105,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (unsubAllPayments) unsubAllPayments();
       if (unsubAllExpenses) unsubAllExpenses();
       if (unsubAllUsers) unsubAllUsers();
+      if (unsubPublicProfiles) unsubPublicProfiles();
+      if (unsubAllPets) unsubAllPets();
       if (unsubConfig) unsubConfig();
       if (unsubPets) unsubPets();
       if (unsubEvents) unsubEvents();
@@ -124,8 +138,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       allPayments,
       allExpenses,
       allUsers,
+      publicProfiles,
       appConfig,
       myPets,
+      allPets,
       events,
       myNotifications,
       login: handleLogin,

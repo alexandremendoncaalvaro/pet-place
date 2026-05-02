@@ -85,9 +85,23 @@ export async function loginWithGoogle(): Promise<UserProfile | null> {
   
   // Check if profile exists
   const docRef = doc(db, 'users', user.uid);
+  const publicRef = doc(db, 'public_profiles', user.uid);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
-    return docSnap.data() as UserProfile;
+    const data = docSnap.data() as UserProfile;
+    // ensure public profile
+    const pubSnap = await getDoc(publicRef);
+    if (!pubSnap.exists()) {
+      await setDoc(publicRef, {
+        uid: data.uid,
+        name: data.name,
+        photoUrl: data.photoUrl,
+        dogName: data.dogName,
+        role: data.role,
+        createdAt: data.createdAt
+      });
+    }
+    return data;
   } else {
     // Determine if bootstrapped admin
     const role = user.email === 'peritto@gmail.com' ? 'admin' : 'resident';
@@ -96,11 +110,20 @@ export async function loginWithGoogle(): Promise<UserProfile | null> {
       name: user.displayName || 'Novo Morador',
       phone: '',
       dogName: '',
+      photoUrl: user.photoURL || '',
       role: role,
       email: user.email || '',
       createdAt: new Date().toISOString()
     };
     await setDoc(docRef, newProfile);
+    await setDoc(publicRef, {
+      uid: newProfile.uid,
+      name: newProfile.name,
+      photoUrl: newProfile.photoUrl,
+      dogName: newProfile.dogName,
+      role: newProfile.role,
+      createdAt: newProfile.createdAt
+    });
     return newProfile;
   }
 }
@@ -169,7 +192,7 @@ export async function ensureCurrentMonthPayment(userId: string) {
   
   try {
     const confSnap = await getDoc(doc(db, 'settings', 'config'));
-    if (confSnap.exists() && confSnap.data().monthlyAmount) {
+    if (confSnap.exists() && confSnap.data().monthlyAmount !== undefined) {
       defaultAmount = confSnap.data().monthlyAmount;
     }
   } catch(e) {}
@@ -224,6 +247,26 @@ export function subscribeToAllExpenses(callback: (expenses: Expense[]) => void) 
   }, handleFirestoreError);
 }
 
+export function subscribeToAllPets(callback: (pets: Pet[]) => void) {
+  if (!isRealBackend) {
+    callback(MOCK_PETS);
+    return () => {};
+  }
+  const q = collection(db, 'pets');
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Pet)));
+  }, (error) => handleFirestoreError(error));
+}
+export function subscribeToAllPublicProfiles(callback: (profiles: UserProfile[]) => void) {
+  if (!isRealBackend) {
+    callback(MOCK_USERS);
+    return () => {};
+  }
+  const q = query(collection(db, 'public_profiles'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(d => d.data() as UserProfile));
+  }, (error) => handleFirestoreError(error));
+}
 export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
   if (!isRealBackend) {
     callback([...MOCK_USERS]);
@@ -246,9 +289,15 @@ export async function uploadProofAndSubmit(paymentId: string, file: File) {
     return;
   }
   try {
-    const storageRef = ref(storage, `proofs/${paymentId}_${Date.now()}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    let url = '';
+    try {
+      const storageRef = ref(storage, `proofs/${paymentId}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      url = await getDownloadURL(storageRef);
+    } catch (err) {
+      console.error("Storage upload error:", err);
+      throw new Error("Erro ao enviar comprovante. O Firebase Storage não está configurado.");
+    }
     const docRef = doc(db, 'payments', paymentId);
     await updateDoc(docRef, {
       status: 'analyzing',
@@ -297,9 +346,15 @@ export async function addExpense(expense: Omit<Expense, 'id' | 'receiptUrl'>, fi
   }
   try {
     const newDoc = doc(collection(db, 'expenses'));
-    const storageRef = ref(storage, `receipts/${newDoc.id}_${Date.now()}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    let url = '';
+    try {
+      const storageRef = ref(storage, `receipts/${newDoc.id}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      url = await getDownloadURL(storageRef);
+    } catch (err) {
+      console.error("Storage upload error:", err);
+      throw new Error("Erro ao enviar recibo. O Firebase Storage não está configurado.");
+    }
     
     await setDoc(newDoc, {
       ...expense,
@@ -323,21 +378,62 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
     return;
   }
   try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    const existing = snap.exists() ? snap.data() : {};
+    
     const safeData: any = {};
     if(data.name !== undefined) safeData.name = data.name;
     if(data.phone !== undefined) safeData.phone = data.phone;
     if(data.dogName !== undefined) safeData.dogName = data.dogName;
     if(data.role !== undefined) safeData.role = data.role;
     
+    // Fallbacks for missing fields in older documents to satisfy strict Firestore schema rules
+    if (existing.dogName === undefined && safeData.dogName === undefined) safeData.dogName = '';
+    if (existing.phone === undefined && safeData.phone === undefined) safeData.phone = '';
+    if (existing.role === undefined && safeData.role === undefined) safeData.role = 'resident';
+    
     if (photoFile) {
-      const storageRef = ref(storage, `users/${userId}_${Date.now()}`);
-      await uploadBytes(storageRef, photoFile);
-      safeData.photoUrl = await getDownloadURL(storageRef);
+      try {
+        const storageRef = ref(storage, `users/${userId}_${Date.now()}`);
+        await uploadBytes(storageRef, photoFile);
+        safeData.photoUrl = await getDownloadURL(storageRef);
+      } catch (err: any) {
+        console.error("Storage upload error:", err);
+        throw new Error("O Firebase Storage não está configurado ou você não tem permissão. Verifique as regras do Storage no console do Firebase.");
+      }
     } else if (data.photoUrl !== undefined) {
       safeData.photoUrl = data.photoUrl;
+    } else if (existing.photoUrl === undefined) {
+      safeData.photoUrl = '';
     }
     
-    await updateDoc(doc(db, 'users', userId), safeData);
+    await updateDoc(userRef, safeData);
+    
+    // Also update public_profiles
+    const publicRef = doc(db, 'public_profiles', userId);
+    const pubSnap = await getDoc(publicRef);
+    const publicData: any = {};
+    if(safeData.name !== undefined) publicData.name = safeData.name;
+    if(safeData.dogName !== undefined) publicData.dogName = safeData.dogName;
+    if(safeData.role !== undefined) publicData.role = safeData.role;
+    if(safeData.photoUrl !== undefined) publicData.photoUrl = safeData.photoUrl;
+
+    if (pubSnap.exists()) {
+      if (Object.keys(publicData).length > 0) {
+        await updateDoc(publicRef, publicData);
+      }
+    } else {
+      // Create if it doesn't exist
+      await setDoc(publicRef, {
+        uid: userId,
+        name: safeData.name ?? existing.name ?? '',
+        photoUrl: safeData.photoUrl ?? existing.photoUrl ?? '',
+        dogName: safeData.dogName ?? existing.dogName ?? '',
+        role: safeData.role ?? existing.role ?? 'resident',
+        createdAt: existing.createdAt ?? new Date().toISOString()
+      });
+    }
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -375,22 +471,15 @@ export async function updateConfig(data: { pixKey?: string; monthlyAmount?: numb
   try {
     const q = doc(db, 'settings', 'config');
     const snap = await getDoc(q);
-    if (!snap.exists()) {
-      await setDoc(q, {
-        pixKey: data.pixKey || '',
-        monthlyAmount: data.monthlyAmount || 30,
-        dueDateDay: data.dueDateDay || 10,
-        paymentInstructions: data.paymentInstructions || '',
-        updatedAt: new Date().toISOString()
-      });
-    } else {
-      const safeData: any = { updatedAt: new Date().toISOString() };
-      if (data.pixKey !== undefined) safeData.pixKey = data.pixKey;
-      if (data.monthlyAmount !== undefined) safeData.monthlyAmount = data.monthlyAmount;
-      if (data.dueDateDay !== undefined) safeData.dueDateDay = data.dueDateDay;
-      if (data.paymentInstructions !== undefined) safeData.paymentInstructions = data.paymentInstructions;
-      await updateDoc(q, safeData);
-    }
+    const existing = snap.exists() ? snap.data() : {};
+    
+    await setDoc(q, {
+      pixKey: data.pixKey ?? existing.pixKey ?? '',
+      monthlyAmount: data.monthlyAmount ?? existing.monthlyAmount ?? 30,
+      dueDateDay: data.dueDateDay ?? existing.dueDateDay ?? 10,
+      paymentInstructions: data.paymentInstructions ?? existing.paymentInstructions ?? '',
+      updatedAt: new Date().toISOString()
+    });
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -416,9 +505,14 @@ export async function addPet(data: Omit<Pet, 'id' | 'createdAt'>, photoFile?: Fi
   try {
     let photoUrl = data.photoUrl || '';
     if (photoFile) {
-      const storageRef = ref(storage, `pets/${Date.now()}_${photoFile.name}`);
-      await uploadBytes(storageRef, photoFile);
-      photoUrl = await getDownloadURL(storageRef);
+      try {
+        const storageRef = ref(storage, `pets/${Date.now()}_${photoFile.name}`);
+        await uploadBytes(storageRef, photoFile);
+        photoUrl = await getDownloadURL(storageRef);
+      } catch (err) {
+        console.error("Storage upload error:", err);
+        throw new Error("Erro ao enviar foto do Pet. Verifique o Firebase Storage.");
+      }
     }
     const newDoc = doc(collection(db, 'pets'));
     await setDoc(newDoc, {
@@ -426,6 +520,36 @@ export async function addPet(data: Omit<Pet, 'id' | 'createdAt'>, photoFile?: Fi
       photoUrl,
       createdAt: new Date().toISOString()
     });
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function updatePet(petId: string, data: Partial<Omit<Pet, 'id' | 'createdAt'>>, photoFile?: File) {
+  if (!isRealBackend) {
+    const petIndex = MOCK_PETS.findIndex(p => p.id === petId);
+    if (petIndex >= 0) {
+      if (photoFile) {
+        data.photoUrl = URL.createObjectURL(photoFile);
+      }
+      MOCK_PETS[petIndex] = { ...MOCK_PETS[petIndex], ...data };
+    }
+    return;
+  }
+  try {
+    const petRef = doc(db, 'pets', petId);
+    let updateData: any = { ...data };
+    
+    if (photoFile) {
+      try {
+        const storageRef = ref(storage, `pets/${Date.now()}_${photoFile.name}`);
+        await uploadBytes(storageRef, photoFile);
+        updateData.photoUrl = await getDownloadURL(storageRef);
+      } catch (err) {
+        console.error("Storage upload error:", err);
+        throw new Error("Erro ao enviar foto do Pet. Verifique o Firebase Storage.");
+      }
+    }
+    
+    await updateDoc(petRef, updateData);
   } catch(e) { handleFirestoreError(e); }
 }
 

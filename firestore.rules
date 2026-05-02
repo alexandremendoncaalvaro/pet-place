@@ -49,6 +49,29 @@ service cloud.firestore {
         && data.createdAt is string && data.createdAt.size() > 0;
     }
 
+    function isValidPublicProfile(data) {
+      return hasAllKeys(data, ['uid', 'name', 'photoUrl', 'dogName', 'role', 'createdAt'])
+        && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100
+        && data.name is string && data.name.size() <= 100
+        && data.photoUrl is string && data.photoUrl.size() <= 1000
+        && data.dogName is string && data.dogName.size() <= 100
+        && data.role is string && data.role in ['admin', 'resident']
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /public_profiles/{profileId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(profileId) && isValidId(profileId)
+                    && isValidPublicProfile(incoming())
+                    && incoming().uid == request.auth.uid;
+      allow update: if isOwner(profileId) && isValidId(profileId)
+                    && isValidPublicProfile(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dogName', 'photoUrl', 'role'])
+                    && incoming().uid == existing().uid
+                    && incoming().createdAt == existing().createdAt
+                    || (isAdmin() && isValidPublicProfile(incoming()));
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       
@@ -61,7 +84,7 @@ service cloud.firestore {
       
       allow update: if isOwner(userId) && isValidId(userId)
                     && isValidUser(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'dogName'])
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'dogName', 'photoUrl'])
                     && incoming().uid == existing().uid
                     && incoming().email == existing().email
                     && incoming().role == existing().role

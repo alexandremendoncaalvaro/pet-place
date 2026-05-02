@@ -100,8 +100,8 @@ export function AdminPanel() {
 function SettingsForm() {
   const { appConfig } = useApp();
   const [pixKey, setPixKey] = useState(appConfig?.pixKey || '');
-  const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() || '30');
-  const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() || '10');
+  const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() ?? '30');
+  const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() ?? '10');
   const [paymentInstructions, setPaymentInstructions] = useState(appConfig?.paymentInstructions || '');
   const [loading, setLoading] = useState(false);
 

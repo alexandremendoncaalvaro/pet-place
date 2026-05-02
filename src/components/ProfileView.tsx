@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { updateProfile, addPet, deletePet } from '../services/api';
-import { User, Phone, Save, Loader2, Camera, Trash2, Plus } from 'lucide-react';
+import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
+import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
 
 export function ProfileView() {
   const { user, myPets } = useApp();
@@ -13,6 +13,7 @@ export function ProfileView() {
 
   // Pet form state
   const [showPetForm, setShowPetForm] = useState(false);
+  const [editingPetId, setEditingPetId] = useState<string | null>(null);
   const [petName, setPetName] = useState('');
   const [petBreed, setPetBreed] = useState('');
   const [petFile, setPetFile] = useState<File | null>(null);
@@ -27,30 +28,43 @@ export function ProfileView() {
       await updateProfile(user.uid, { name, phone }, userPhoto || undefined);
       alert('Perfil atualizado com sucesso!');
       setUserPhoto(null);
-    } catch (err) {
-      alert('Erro ao atualizar perfil.');
+    } catch (err: any) {
+      alert(`Erro ao atualizar perfil: ${err?.message || err}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddPet = async (e: React.FormEvent) => {
+  const startEditPet = (pet: any) => {
+    setEditingPetId(pet.id);
+    setPetName(pet.name);
+    setPetBreed(pet.breed);
+    setPetFile(null);
+    setShowPetForm(true);
+  };
+
+  const handleSavePet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setPetLoading(true);
     try {
-      await addPet({
-        ownerId: user.uid,
-        name: petName,
-        breed: petBreed,
-        photoUrl: ''
-      }, petFile || undefined);
+      if (editingPetId) {
+        await updatePet(editingPetId, { name: petName, breed: petBreed }, petFile || undefined);
+      } else {
+        await addPet({
+          ownerId: user.uid,
+          name: petName,
+          breed: petBreed,
+          photoUrl: ''
+        }, petFile || undefined);
+      }
       setShowPetForm(false);
+      setEditingPetId(null);
       setPetName('');
       setPetBreed('');
       setPetFile(null);
     } catch (e) {
-      alert('Erro ao adicionar pet');
+      alert(`Erro ao salvar pet: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPetLoading(false);
     }
@@ -147,7 +161,10 @@ export function ProfileView() {
                 <p className="font-semibold text-gray-800">{p.name}</p>
                 <p className="text-xs text-gray-500">{p.breed || 'Sem raça'}</p>
               </div>
-              <button onClick={() => handleDeletePet(p.id, p.name)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+              <button type="button" onClick={() => startEditPet(p)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
+                <Edit2 size={18} />
+              </button>
+              <button type="button" onClick={() => handleDeletePet(p.id, p.name)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -155,7 +172,7 @@ export function ProfileView() {
         </div>
 
         {showPetForm && (
-          <form onSubmit={handleAddPet} className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+          <form onSubmit={handleSavePet} className="mt-4 pt-4 border-t border-gray-100 space-y-3">
             <div>
               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Nome do Pet</label>
               <input required value={petName} onChange={e => setPetName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm" />
@@ -175,9 +192,9 @@ export function ProfileView() {
               </div>
             </div>
             <div className="flex gap-2 pt-2">
-              <button type="button" onClick={() => setShowPetForm(false)} className="flex-1 text-sm bg-gray-100 text-gray-600 py-2.5 rounded-xl font-medium">Cancelar</button>
+              <button type="button" onClick={() => { setShowPetForm(false); setEditingPetId(null); }} className="flex-1 text-sm bg-gray-100 text-gray-600 py-2.5 rounded-xl font-medium">Cancelar</button>
               <button disabled={petLoading} type="submit" className="flex-1 text-sm bg-blue-600 text-white py-2.5 rounded-xl font-medium flex items-center justify-center disabled:opacity-50">
-                {petLoading ? <Loader2 size={16} className="animate-spin" /> : 'Adicionar Pet'}
+                {petLoading ? <Loader2 size={16} className="animate-spin" /> : (editingPetId ? 'Salvar Pet' : 'Adicionar Pet')}
               </button>
             </div>
           </form>

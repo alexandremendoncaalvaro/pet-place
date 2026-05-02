@@ -7,10 +7,11 @@ import { TransparenciaView } from './components/TransparenciaView';
 import { AdminPanel } from './components/AdminPanel';
 import { ProfileView } from './components/ProfileView';
 import { MuralView } from './components/MuralView';
+import { DirectoryView } from './components/DirectoryView';
 
 export function MainApp() {
   const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications } = useApp();
-  const [activeTab, setActiveTab] = useState<'home' | 'mural' | 'transparencia' | 'admin' | 'perfil'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'mural' | 'transparencia' | 'admin' | 'perfil' | 'directory'>('home');
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-gray-500 animate-pulse text-lg">Carregando Caixinha...</div>;
@@ -86,25 +87,32 @@ export function MainApp() {
         {activeTab === 'home' && <ResidentDashboard />}
         {activeTab === 'mural' && <MuralView />}
         {activeTab === 'transparencia' && <TransparenciaView />}
+        {activeTab === 'directory' && <DirectoryView />}
         {activeTab === 'perfil' && <ProfileView />}
         {activeTab === 'admin' && user.role === 'admin' && <AdminPanel />}
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white border-t border-gray-100 fixed bottom-0 w-full px-6 py-2 pb-safe flex justify-around items-center">
+      <nav className="bg-white border-t border-gray-100 fixed bottom-0 left-0 w-full z-20 px-2 sm:px-6 py-2 pb-safe flex justify-around items-center">
         <NavItem 
           active={activeTab === 'home'} 
           onClick={() => setActiveTab('home')} 
-          icon={<Home size={24} />} 
+          icon={<Home size={22} />} 
           label="Início" 
+        />
+        <NavItem 
+          active={activeTab === 'directory'} 
+          onClick={() => setActiveTab('directory')} 
+          icon={<User size={22} />} 
+          label="Comunidade" 
         />
         <NavItem 
           active={activeTab === 'mural'} 
           onClick={() => setActiveTab('mural')} 
           icon={
             <div className="relative">
-              <Bell size={24} />
-              {unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 border border-white rounded-full"></span>}
+              <Bell size={22} />
+              {unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 border border-white rounded-full"></span>}
             </div>
           } 
           label="Mural" 
@@ -112,14 +120,14 @@ export function MainApp() {
         <NavItem 
           active={activeTab === 'transparencia'} 
           onClick={() => setActiveTab('transparencia')} 
-          icon={<PieChart size={24} />} 
+          icon={<PieChart size={22} />} 
           label="Extrato" 
         />
         {user.role === 'admin' && (
           <NavItem 
             active={activeTab === 'admin'} 
             onClick={() => setActiveTab('admin')} 
-            icon={<ShieldCheck size={24} />} 
+            icon={<ShieldCheck size={22} />} 
             label="Admin" 
           />
         )}

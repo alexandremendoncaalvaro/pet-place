@@ -65,7 +65,7 @@ export function ResidentDashboard() {
         {currentPayment.status === 'pending' || currentPayment.status === 'rejected' ? (
           <>
             <p className="text-gray-600 text-sm mb-2">
-              Sua contribuição de <strong>R$ {currentPayment.amount.toFixed(2)}</strong> nos ajuda a manter o espaço para os cães!
+              Sua contribuição de <strong>R$ {(appConfig?.monthlyAmount ?? currentPayment.amount).toFixed(2)}</strong> nos ajuda a manter o espaço para os cães!
             </p>
             {appConfig?.dueDateDay && (
               <p className="text-xs text-gray-500 mb-4 bg-gray-100 py-1 px-3 rounded-full inline-block">
