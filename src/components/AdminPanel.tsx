@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, 
 import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
 import { Payment, UserProfile, AppEvent } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 
 const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
@@ -191,16 +192,25 @@ export function AdminPanel() {
                         className="flex items-center gap-1 inline-flex"
                         onSubmit={(e) => {
                           e.preventDefault();
-                          updateProfile(u.uid, { phone: (e.target as any).elements.phone.value });
+                          updateProfile(u.uid, { phone: normalizePhoneBR((e.target as any).elements.phone.value) });
                           setEditingPhoneUid(null);
                         }}
                       >
-                         <input name="phone" defaultValue={u.phone || ''} className="border border-gray-300 rounded px-1 py-0.5 w-24 text-[10px]" autoFocus />
+                         <input
+                           name="phone"
+                           defaultValue={formatPhoneBR(u.phone)}
+                           placeholder={PHONE_BR_PLACEHOLDER}
+                           inputMode="tel"
+                           autoComplete="tel-national"
+                           maxLength={15}
+                           className="border border-gray-300 rounded px-1 py-0.5 w-32 text-[10px]"
+                           autoFocus
+                         />
                          <button type="submit" className="text-emerald-500 bg-emerald-50 px-1 py-0.5 rounded text-[10px]">OK</button>
                       </form>
                     ) : (
                       <>
-                        {u.phone || '-'}
+                        {formatPhoneBR(u.phone) || '-'}
                         <button 
                           onClick={() => setEditingPhoneUid(u.uid)}
                           className="ml-1 text-blue-500 hover:text-blue-700 transition-colors p-1"

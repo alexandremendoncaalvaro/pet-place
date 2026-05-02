@@ -17,7 +17,8 @@
     "pages:dev": "wrangler pages deploy pages-proxy-dev --project-name pet-place-dev --branch dev",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -41,6 +42,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
+    "vitest": "^4.1.5",
     "wrangler": "^4.87.0"
   }
 }

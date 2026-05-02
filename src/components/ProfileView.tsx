@@ -3,11 +3,12 @@ import { useApp } from '../context/AppContext';
 import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
 import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 
 export function ProfileView() {
   const { user, myPets, publicProfiles } = useApp();
   const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const [phone, setPhone] = useState(formatPhoneBR(user?.phone || ''));
   const [userPhoto, setUserPhoto] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const userFileInputRef = useRef<HTMLInputElement>(null);
@@ -31,7 +32,7 @@ export function ProfileView() {
     if (!user) return;
     setLoading(true);
     try {
-      await updateProfile(user.uid, { name, phone }, userPhoto || undefined);
+      await updateProfile(user.uid, { name, phone: normalizePhoneBR(phone) }, userPhoto || undefined);
       alert('Perfil atualizado com sucesso!');
       setUserPhoto(null);
     } catch (err: any) {
@@ -162,8 +163,11 @@ export function ProfileView() {
           </label>
           <input 
             value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="ex: 11999999999"
+            onChange={e => setPhone(formatPhoneBR(e.target.value))}
+            placeholder={PHONE_BR_PLACEHOLDER}
+            inputMode="tel"
+            autoComplete="tel-national"
+            maxLength={15}
             className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-700"
           />
         </div>

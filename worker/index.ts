@@ -340,7 +340,7 @@ async function updateUserRoute(request: Request, env: Env, user: CurrentUser, us
   const userStatus = user.role === 'admin' && data.userStatus ? data.userStatus : existing.userStatus;
   const family = data.familyId !== undefined ? data.familyId || null : existing.familyId || null;
   const photo = form.get('photo');
-  let photoKey: string | null | undefined;
+  let photoKey: string | null = null;
   let photoUrl = data.photoUrl !== undefined ? data.photoUrl : existing.photoUrl;
   if (photo instanceof File && photo.size > 0) {
     photoKey = await putFile(env, 'users', photo);
@@ -353,7 +353,7 @@ async function updateUserRoute(request: Request, env: Env, user: CurrentUser, us
     WHERE id = ?
   `).bind(
     data.name ?? existing.name,
-    data.phone ?? existing.phone,
+    data.phone !== undefined ? normalizePhoneBR(data.phone) : existing.phone,
     data.dogName ?? existing.dogName,
     role,
     family,
@@ -1074,6 +1074,12 @@ function base64urlEncode(bytes: Uint8Array): string {
 function base64urlDecode(value: string): Uint8Array {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
   return Uint8Array.from(atob(normalized), (c) => c.charCodeAt(0));
+}
+
+function normalizePhoneBR(value: unknown): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  if ((digits.length === 13 || digits.length === 12) && digits.startsWith('55')) return digits.slice(2);
+  return digits.slice(0, 11);
 }
 
 class HttpError extends Error {
