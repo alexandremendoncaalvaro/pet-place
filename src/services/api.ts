@@ -1,4 +1,5 @@
 import { Role, UserProfile, Payment, Expense, PaymentStatus, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
+import JSZip from 'jszip';
 import imageCompression from 'browser-image-compression';
 import { format } from 'date-fns';
 
@@ -9,7 +10,7 @@ let app: any = null;
 export let isRealBackend = false;
 
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, orderBy, onSnapshot, limit } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject, getBlob } from 'firebase/storage';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
 import { getMessaging, getToken } from 'firebase/messaging';
 
@@ -1003,6 +1004,103 @@ export async function togglePostLike(postId: string, userId: string, currentlyLi
       await updateDoc(refDoc, { likedBy: newLikedBy });
     }
   } catch(e) { handleFirestoreError(e); }
+}
+
+export async function exportFullBackup(): Promise<Blob | null> {
+  if (!isRealBackend) {
+    alert("Apenas dados locais. Use o banco real para backup com mídias.");
+    return null;
+  }
+  const collectionsToExport = ['users', 'public_profiles', 'pets', 'payments', 'expenses', 'events', 'notifications', 'posts', 'postComments', 'settings'];
+  const backupData: Record<string, any[]> = {};
+  const urlsToDownload = new Set<string>();
+  
+  try {
+    for (const colName of collectionsToExport) {
+      const snap = await getDocs(collection(db, colName));
+      const colData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      backupData[colName] = colData;
+      
+      // Collect media URLs
+      colData.forEach(item => {
+        if (item.photoUrl && typeof item.photoUrl === 'string' && item.photoUrl.includes('firebasestorage')) urlsToDownload.add(item.photoUrl);
+        if (item.proofUrl && typeof item.proofUrl === 'string' && item.proofUrl.includes('firebasestorage')) urlsToDownload.add(item.proofUrl);
+        if (item.receiptUrl && typeof item.receiptUrl === 'string' && item.receiptUrl.includes('firebasestorage')) urlsToDownload.add(item.receiptUrl);
+        if (item.mediaUrl && typeof item.mediaUrl === 'string' && item.mediaUrl.includes('firebasestorage')) urlsToDownload.add(item.mediaUrl);
+      });
+    }
+
+    const zip = new JSZip();
+    zip.file('backup.json', JSON.stringify(backupData, null, 2));
+
+    const mediaFolder = zip.folder('media');
+    if (mediaFolder) {
+      for (const url of Array.from(urlsToDownload)) {
+        try {
+          const storageRef = ref(storage, url);
+          // Wait to not overload
+          const blob = await getBlob(storageRef);
+          mediaFolder.file(storageRef.fullPath, blob);
+        } catch(e) {
+          console.warn("Failed to download media for backup:", url, e);
+        }
+      }
+    }
+
+    return await zip.generateAsync({ type: 'blob' });
+  } catch (e) {
+    handleFirestoreError(e);
+    return null;
+  }
+}
+
+export async function restoreZippedBackup(zipFile: File): Promise<void> {
+  if (!isRealBackend) {
+    alert("Você está usando o modo Mock. Não é possível restaurar o ZIP.");
+    return;
+  }
+  try {
+    const zip = new JSZip();
+    const unzipped = await zip.loadAsync(zipFile);
+    
+    // 1. Restore JSON
+    const jsonFile = unzipped.file('backup.json');
+    if (jsonFile) {
+      const jsonContent = await jsonFile.async('string');
+      const backupData = JSON.parse(jsonContent);
+      
+      for (const [colName, docs] of Object.entries(backupData)) {
+        if (Array.isArray(docs)) {
+          for (const docData of docs) {
+            const { id, ...data } = docData;
+            await setDoc(doc(db, colName, id), data);
+          }
+        }
+      }
+    }
+
+    // 2. Restore Media
+    const mediaFolder = unzipped.folder('media');
+    if (mediaFolder) {
+      // iterate over files in the media folder
+      mediaFolder.forEach(async (relativePath, file) => {
+        if (!file.dir) {
+          try {
+            const fileBlob = await file.async('blob');
+            const storageRef = ref(storage, relativePath);
+            await uploadBytes(storageRef, fileBlob);
+          } catch(e) {
+             console.warn("Failed to restore file", relativePath);
+          }
+        }
+      });
+    }
+    
+    alert('Restauração do banco e mídias concluída!');
+  } catch(e) {
+    handleFirestoreError(e);
+    throw e;
+  }
 }
 
 function handleFirestoreError(error: unknown) {

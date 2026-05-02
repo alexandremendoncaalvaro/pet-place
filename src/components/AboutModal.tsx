@@ -25,7 +25,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
         <div className="p-6 overflow-y-auto space-y-6 flex-1 pb-10">
           
           <div className="text-center">
-            <h3 className="font-bold text-2xl text-blue-900 mb-2">Perfuminho Pet Place</h3>
+            <h3 className="font-bold text-2xl text-blue-900 mb-2">Nosso Pet Place</h3>
             <p className="text-sm text-gray-600 leading-relaxed bg-blue-50/50 p-4 rounded-2xl border border-blue-50 inline-block text-left">
               Criamos este Pet Place em um terreno gentilmente emprestado. Com a união de moradores e apaixonados por pets, cercamos a área e construímos um espaço seguro e divertido para nossos melhores amigos.
             </p>
@@ -86,7 +86,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
               Feito com carinho ❤️
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Para a comunidade Perfuminho.
+              Para a nossa comunidade.
             </p>
           </div>
 

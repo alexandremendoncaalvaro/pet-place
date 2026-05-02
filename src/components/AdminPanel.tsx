@@ -2,12 +2,20 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment } from '../services/api';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
 import { Payment, UserProfile, AppEvent } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 
 const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
+  
+  if (u.email === 'peritto@gmail.com') {
+    return (
+      <div className="flex-1 text-[10px] bg-blue-50 text-blue-700 py-1.5 rounded-lg font-bold text-center uppercase tracking-wide border border-blue-100">
+        👑 Owner
+      </div>
+    );
+  }
   
   if (confirming) {
     return (
@@ -248,12 +256,13 @@ export function AdminPanel() {
 }
 
 function SettingsForm() {
-  const { appConfig } = useApp();
+  const { appConfig, user } = useApp();
   const [pixKey, setPixKey] = useState(appConfig?.pixKey || '');
   const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() ?? '30');
   const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() ?? '10');
   const [paymentInstructions, setPaymentInstructions] = useState(appConfig?.paymentInstructions || '');
   const [loading, setLoading] = useState(false);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -320,6 +329,74 @@ function SettingsForm() {
       >
         {loading ? 'Salvando...' : 'Salvar Ajustes'}
       </button>
+
+      <div className="pt-6 border-t border-gray-100 mt-6">
+        <h3 className="text-sm font-semibold text-gray-800 mb-2">Backup de Segurança</h3>
+        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+          O backup é importante e deu. Salve este arquivo num local seguro, como o seu Google Drive, para usarmos como checkpoint de restauração caso necessário.
+        </p>
+        <button 
+          type="button"
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            try {
+              const zipBlob = await exportFullBackup();
+              if (zipBlob) {
+                const url = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup_petplace_${new Date().toISOString().split('T')[0]}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }
+            } catch (err: any) {
+              alert('Erro ao exportar backup: ' + (err?.message || err));
+            } finally {
+              setLoading(false);
+            }
+          }}
+          className="w-full bg-blue-50 text-blue-600 active:bg-blue-100 py-3 rounded-xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
+        >
+          {loading ? 'Preparando ZIP...' : 'Baixar Dados e Mídias (ZIP)'}
+        </button>
+        
+        {user?.email === 'peritto@gmail.com' && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <h4 className="text-xs font-semibold text-gray-700 mb-2">Opções do Owner 👑</h4>
+            <input 
+              type="file" 
+              accept=".zip" 
+              className="hidden" 
+              ref={restoreFileRef}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (!confirm("Isso irá restaurar todos os dados e imagens do arquivo ZIP no banco de dados. Deseja continuar?")) return;
+                setLoading(true);
+                try {
+                  await restoreZippedBackup(file);
+                } catch (err: any) {
+                  alert('Erro na restauração: ' + (err?.message || err));
+                } finally {
+                  setLoading(false);
+                  if (restoreFileRef.current) restoreFileRef.current.value = '';
+                }
+              }}
+            />
+            <button 
+              type="button"
+              disabled={loading}
+              onClick={() => restoreFileRef.current?.click()}
+              className="w-full bg-red-50 text-red-600 active:bg-red-100 py-3 rounded-xl font-medium flex items-center justify-center transition-all disabled:opacity-50 text-xs"
+            >
+              {loading ? 'Restaurando...' : 'Restaurar Checkpoint (ZIP)'}
+            </button>
+          </div>
+        )}
+      </div>
     </form>
   );
 }

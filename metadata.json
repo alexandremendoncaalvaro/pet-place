@@ -1,6 +1,6 @@
 {
-  "name": "Caixinha Pet Place",
-  "description": "App to manage community fund collections",
+  "name": "Pet Place Community",
+  "description": "App para gestão de rateios e mural da comunidade do Pet Place",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

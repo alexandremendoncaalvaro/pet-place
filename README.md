@@ -1,6 +1,6 @@
-# Perfuminho Pet Place 🐾
+# Nosso Pet Place 🐾
 
-O **Perfuminho Pet Place** é mais do que um aplicativo; é o coração digital da nossa comunidade! ❤️
+O **Nosso Pet Place** é mais do que um aplicativo; é o coração digital da nossa comunidade! ❤️
 
 ## 📖 Nossa História
 
