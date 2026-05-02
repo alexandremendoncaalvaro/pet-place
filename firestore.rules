@@ -38,7 +38,8 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return hasAllKeys(data, ['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt'])
+      return data.keys().hasAll(['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt', 'fcmToken'])
         && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100
         && data.name is string && data.name.size() <= 100
         && data.phone is string && data.phone.size() <= 20

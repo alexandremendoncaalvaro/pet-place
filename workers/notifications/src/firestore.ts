@@ -284,8 +284,8 @@ export async function sendFCMMessage(
         body
       },
       webpush: {
-        fcm_options: {
-          link: "https://seu-app.com" // Update com a URL do seu app se quiser abrir ao clicar
+        notification: {
+          icon: '/vite.svg'
         }
       }
     }

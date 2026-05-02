@@ -1,38 +1,32 @@
 // public/firebase-messaging-sw.js
+// Service Worker para Push Notifications em background (tela travada / app fechado)
 
-// Import and configure the Firebase SDK
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Default config. In production this should match your real config
-// but since the service worker runs isolated, it needs its own initializeApp
-const firebaseConfig = {
-  // You would ideally inject these via build process or rely on 
-  // URL params, but usually hardcoding the safe public pieces is standard practice 
-  // for this specific file, or you can fetch it if needed.
-};
-
-// If firebase-applet-config.json was accessible, one could use it, but since this is static,
-// we just setup a minimal stub. If you want background messages, you MUST 
-// put your valid public keys here or configure them manually later.
-/* 
 firebase.initializeApp({
-  apiKey: "...",
-  projectId: "...",
-  messagingSenderId: "...",
-  appId: "..."
+  apiKey: "AIzaSyD5vH_TX2lCZAS6gjbp31H0sSeuu6aZ15M",
+  authDomain: "gen-lang-client-0734279700.firebaseapp.com",
+  projectId: "gen-lang-client-0734279700",
+  storageBucket: "gen-lang-client-0734279700.firebasestorage.app",
+  messagingSenderId: "246731267780",
+  appId: "1:246731267780:web:3d4391f23ed1c998cb3391"
 });
 
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
+  console.log('[firebase-messaging-sw.js] Push recebido em background:', payload);
+
+  const notificationTitle = payload.notification?.title || 'Caixinha Pet Place';
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/vite.svg'
+    body: payload.notification?.body || '',
+    icon: '/vite.svg',
+    badge: '/vite.svg',
+    vibrate: [200, 100, 200],
+    tag: 'caixinha-notification',
+    renotify: true
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
-*/
