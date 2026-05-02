@@ -4,12 +4,15 @@
  */
 
 import { AppProvider } from './context/AppContext';
+import { FeedbackProvider } from './components/Feedback';
 import { MainApp } from './MainApp';
 
 export default function App() {
   return (
     <AppProvider>
-      <MainApp />
+      <FeedbackProvider>
+        <MainApp />
+      </FeedbackProvider>
     </AppProvider>
   );
 }

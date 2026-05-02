@@ -6,11 +6,11 @@ import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile,
 import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
-import { AdminFeedbackProvider, useAdminFeedback } from './AdminFeedback';
+import { useFeedback } from './Feedback';
 
 const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   
   if (u.email === 'peritto@gmail.com') {
     return (
@@ -88,16 +88,12 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
 };
 
 export function AdminPanel() {
-  return (
-    <AdminFeedbackProvider>
-      <AdminPanelContent />
-    </AdminFeedbackProvider>
-  );
+  return <AdminPanelContent />;
 }
 
 function AdminPanelContent() {
   const { allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
-  const { confirm, toast } = useAdminFeedback();
+  const { confirm, toast } = useFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
@@ -288,7 +284,7 @@ function AdminPanelContent() {
 }
 
 function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   const [selectedUserId, setSelectedUserId] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -392,7 +388,7 @@ function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
 }
 
 function IdentityLinkSuggestionsPanel({ suggestions }: { suggestions: IdentityLinkSuggestion[] }) {
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const pending = suggestions.filter((suggestion) => suggestion.status === 'pending');
   if (!pending.length) return null;
@@ -430,7 +426,7 @@ function IdentityLinkSuggestionsPanel({ suggestions }: { suggestions: IdentityLi
 
 function SettingsForm() {
   const { appConfig, user } = useApp();
-  const { confirm, toast } = useAdminFeedback();
+  const { confirm, toast } = useFeedback();
   const [pixKey, setPixKey] = useState(appConfig?.pixKey || '');
   const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() ?? '30');
   const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() ?? '10');
@@ -583,7 +579,7 @@ function SettingsForm() {
 
 const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payment, userName }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   const { setFullscreenImage } = useApp();
 
   const handleAction = async (action: 'approve' | 'reject') => {
@@ -656,7 +652,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
 
   const handleUpload = async (file: File) => {
     try {
@@ -737,7 +733,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
 
 function ExpenseForm() {
   const { user } = useApp();
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -831,7 +827,7 @@ function ExpenseForm() {
 
 function RateioForm() {
   const { allUsers } = useApp();
-  const { confirm, toast } = useAdminFeedback();
+  const { confirm, toast } = useFeedback();
   const [desc, setDesc] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
@@ -985,7 +981,7 @@ function RateioForm() {
 
 function CommsForm() {
   const { user } = useApp();
-  const { toast } = useAdminFeedback();
+  const { toast } = useFeedback();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'event' | 'announcement'>('announcement');
   const [title, setTitle] = useState('');
@@ -1115,7 +1111,7 @@ function CommsForm() {
 
 function CommsManager() {
   const { events, allUsers } = useApp();
-  const { confirm } = useAdminFeedback();
+  const { confirm } = useFeedback();
   
   return (
     <div className="space-y-6">

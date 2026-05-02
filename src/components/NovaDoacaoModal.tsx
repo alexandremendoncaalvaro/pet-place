@@ -3,9 +3,11 @@ import { useApp } from '../context/AppContext';
 import { X, Heart, UploadCloud } from 'lucide-react';
 import { submitDonation } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { useFeedback } from './Feedback';
 
 export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
   const { user } = useApp();
+  const { toast } = useFeedback();
   const [amountStr, setAmountStr] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,14 +17,25 @@ export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!user) return;
     const amount = parseFloat(amountStr);
-    if (!amount || amount <= 0) return alert('Valor inválido.');
-    if (!file) return alert('Anexe o comprovante.');
+    if (!amount || amount <= 0) {
+      toast('Informe um valor válido.', 'error');
+      return;
+    }
+    if (!file) {
+      toast('Anexe o comprovante.', 'error');
+      return;
+    }
     
     setLoading(true);
-    await submitDonation(amount, file, user.familyId || user.uid);
-    setLoading(false);
-    alert('Doação enviada com sucesso! Ela entrará no rateio/balanço assim que aprovada.');
-    onClose();
+    try {
+      await submitDonation(amount, file, user.familyId || user.uid);
+      toast('Doação enviada para aprovação.');
+      onClose();
+    } catch (err) {
+      toast('Erro ao enviar doação. Tente novamente.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

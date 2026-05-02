@@ -21,14 +21,14 @@ type ConfirmState = ConfirmOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-type AdminFeedbackContextValue = {
+type FeedbackContextValue = {
   toast: (message: string, variant?: ToastVariant) => void;
   confirm: (options: ConfirmOptions) => Promise<boolean>;
 };
 
-const AdminFeedbackContext = createContext<AdminFeedbackContextValue | null>(null);
+const FeedbackContext = createContext<FeedbackContextValue | null>(null);
 
-export function AdminFeedbackProvider({ children }: { children: React.ReactNode }) {
+export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
@@ -54,7 +54,7 @@ export function AdminFeedbackProvider({ children }: { children: React.ReactNode 
   };
 
   return (
-    <AdminFeedbackContext.Provider value={{ toast, confirm }}>
+    <FeedbackContext.Provider value={{ toast, confirm }}>
       {children}
 
       {toastState && (
@@ -98,12 +98,12 @@ export function AdminFeedbackProvider({ children }: { children: React.ReactNode 
           </div>
         </div>
       )}
-    </AdminFeedbackContext.Provider>
+    </FeedbackContext.Provider>
   );
 }
 
-export function useAdminFeedback() {
-  const context = useContext(AdminFeedbackContext);
-  if (!context) throw new Error('useAdminFeedback must be used within AdminFeedbackProvider');
+export function useFeedback() {
+  const context = useContext(FeedbackContext);
+  if (!context) throw new Error('useFeedback must be used within FeedbackProvider');
   return context;
 }

@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign, Send, FileVideo } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { useFeedback } from './Feedback';
 
 interface CreatePostModalProps {
   onClose: () => void;
@@ -10,6 +11,7 @@ interface CreatePostModalProps {
 
 export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const { user, publicProfiles, allPets } = useApp();
+  const { toast } = useFeedback();
   
   const [postContent, setPostContent] = useState('');
   const [postFile, setPostFile] = useState<File | null>(null);
@@ -65,7 +67,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
       
       onClose();
     } catch(e) {
-      alert("Erro ao postar.");
+      toast('Erro ao postar. Tente novamente.', 'error');
     } finally {
       setIsPosting(false);
     }
@@ -170,7 +172,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
           <input type="file" accept="image/*,video/mp4,video/quicktime" className="hidden" ref={postFileInputRef} onChange={e => {
             if(e.target.files?.[0]) {
               if (e.target.files[0].size > 15 * 1024 * 1024) {
-                alert("O arquivo não pode passar de 15MB");
+                toast('O arquivo não pode passar de 15MB.', 'error');
                 return;
               }
               setPostFile(e.target.files[0]);

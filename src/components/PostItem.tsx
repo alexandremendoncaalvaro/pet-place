@@ -6,9 +6,11 @@ import { useApp } from '../context/AppContext';
 import { AppPost, PostComment } from '../lib/types';
 import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { useFeedback } from './Feedback';
 
 export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const { user, publicProfiles, allPets, isAdmin, setViewProfileId, setViewPetId, setFullscreenImage } = useApp();
+  const { toast } = useFeedback();
   const author = publicProfiles.find(p => p.uid === post.authorId);
   const isLiked = user ? post.likedBy?.includes(user.uid) : false;
   
@@ -97,7 +99,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
       setIsDeletingComment(commentId);
       await deleteComment(commentId);
     } catch(e: any) {
-      alert(e.message || 'Erro ao deletar comentário');
+      toast(e.message || 'Erro ao deletar comentário.', 'error');
     } finally {
       setIsDeletingComment(null);
     }

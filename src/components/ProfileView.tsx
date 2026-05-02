@@ -4,9 +4,11 @@ import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
 import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
+import { useFeedback } from './Feedback';
 
 export function ProfileView() {
   const { user, myPets, publicProfiles } = useApp();
+  const { toast } = useFeedback();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(formatPhoneBR(user?.phone || ''));
   const [userPhoto, setUserPhoto] = useState<File | null>(null);
@@ -33,10 +35,10 @@ export function ProfileView() {
     setLoading(true);
     try {
       await updateProfile(user.uid, { name, phone: normalizePhoneBR(phone) }, userPhoto || undefined);
-      alert('Perfil atualizado com sucesso!');
+      toast('Perfil atualizado.');
       setUserPhoto(null);
     } catch (err: any) {
-      alert(`Erro ao atualizar perfil: ${err?.message || err}`);
+      toast(`Erro ao atualizar perfil: ${err?.message || err}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -51,15 +53,15 @@ export function ProfileView() {
     setFamilyLoading(true);
     try {
       if (familyCode.trim() === user.uid) {
-        alert('Você não pode entrar na sua própria família assim.');
+        toast('Você não pode usar seu próprio convite.', 'error');
       } else {
         await updateProfile(user.uid, { familyId: familyCode.trim() });
-        alert('Família vinculada com sucesso!');
+        toast('Grupo familiar vinculado.');
         setShowFamilyInput(false);
         setFamilyCode('');
       }
     } catch (err: any) {
-      alert(`Erro ao vincular família: ${err?.message || err}`);
+      toast(`Erro ao vincular família: ${err?.message || err}`, 'error');
     } finally {
       setFamilyLoading(false);
     }
@@ -71,9 +73,9 @@ export function ProfileView() {
     try {
       await updateProfile(user.uid, { familyId: user.uid });
       setConfirmLeaveFamily(false);
-      alert('Você saiu do grupo familiar.');
+      toast('Você saiu do grupo familiar.');
     } catch (err: any) {
-      alert(`Erro ao atualizar perfil: ${err?.message || err}`);
+      toast(`Erro ao atualizar perfil: ${err?.message || err}`, 'error');
     } finally {
       setFamilyLoading(false);
     }
@@ -108,7 +110,7 @@ export function ProfileView() {
       setPetBreed('');
       setPetFile(null);
     } catch (e) {
-      alert(`Erro ao salvar pet: ${e instanceof Error ? e.message : String(e)}`);
+      toast(`Erro ao salvar pet: ${e instanceof Error ? e.message : String(e)}`, 'error');
     } finally {
       setPetLoading(false);
     }
@@ -259,7 +261,7 @@ export function ProfileView() {
                       <code className="font-mono text-sm text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded select-all">{user?.uid?.substring(0, 8)}...</code>
                       <button 
                         type="button"
-                        onClick={() => { navigator.clipboard.writeText(user?.uid || ''); alert('Código copiado!'); }}
+                        onClick={() => { navigator.clipboard.writeText(user?.uid || ''); toast('Código copiado.'); }}
                         className="text-xs text-blue-600 font-bold px-2 py-1 bg-blue-100 rounded-md active:scale-95"
                       >
                         COPIAR

@@ -6,9 +6,11 @@ import { Camera, CheckCircle2, Copy, AlertTriangle, Clock, Loader2, ImagePlus, S
 import { uploadProofAndSubmit, addPost, togglePostLike } from '../services/api';
 import { PostItem } from './PostItem';
 import { NovaDoacaoModal } from './NovaDoacaoModal';
+import { useFeedback } from './Feedback';
 
 export function ResidentDashboard() {
   const { user, myPayments, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
+  const { toast } = useFeedback();
   const currentMonth = format(new Date(), 'yyyy-MM');
   const currentPayment = myPayments.find(p => p.month === currentMonth);
   const [copied, setCopied] = useState(false);
@@ -35,7 +37,7 @@ export function ResidentDashboard() {
         setIsUploading(true);
         await uploadProofAndSubmit(currentPayment.id, file);
       } catch (err) {
-        alert("Erro ao enviar comprovante. Tente novamente.");
+        toast('Erro ao enviar comprovante. Tente novamente.', 'error');
       } finally {
         setIsUploading(false);
       }
