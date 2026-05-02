@@ -13,3 +13,10 @@ body {
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+@utility hide-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -16,9 +16,9 @@ export default {
    * para eventos que estão a ≤24h ou ≤1h de acontecer.
    */
   async scheduled(
-    controller: ScheduledController,
+    controller: any,
     env: Env,
-    ctx: ExecutionContext
+    ctx: any
   ): Promise<void> {
     console.log(`[CRON] Executando verificação de eventos agendados — ${new Date().toISOString()}`);
 
@@ -41,7 +41,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx: ExecutionContext
+    ctx: any
   ): Promise<Response> {
     const url = new URL(request.url);
     const corsHeaders = {

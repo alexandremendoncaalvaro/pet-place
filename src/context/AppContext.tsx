@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, Notification as AppNotification } from '../lib/types';
+import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
 import { 
   initFirebase, 
   subscribeToAuth, 
@@ -16,6 +16,7 @@ import {
   subscribeToMyPets,
   subscribeToAllEvents,
   subscribeToMyNotifications,
+  subscribeToAllPosts,
   isRealBackend,
   setMockRole,
   requestPushToken
@@ -34,10 +35,19 @@ interface AppState {
   allPets: Pet[];
   events: AppEvent[];
   myNotifications: AppNotification[];
+  posts: AppPost[];
+  loadMorePosts: () => void;
+  postLimit: number;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isRealBackend: boolean;
   toggleMockRole: () => void;
+  viewProfileId: string | null;
+  setViewProfileId: (id: string | null) => void;
+  viewPetId: string | null;
+  setViewPetId: (id: string | null) => void;
+  fullscreenImage: {url: string, title?: string} | null;
+  setFullscreenImage: (img: {url: string, title?: string} | null) => void;
 }
 
 const AppContext = createContext<AppState | undefined>(undefined);
@@ -55,6 +65,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [allPets, setAllPets] = useState<Pet[]>([]);
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
+  const [posts, setPosts] = useState<AppPost[]>([]);
+  const [postLimit, setPostLimit] = useState(10);
+  
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [viewPetId, setViewPetId] = useState<string | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<{url: string, title?: string} | null>(null);
+
+  useEffect(() => {
+    let unsubPosts: () => void;
+    initFirebase().then(() => {
+      unsubPosts = subscribeToAllPosts(postLimit, setPosts);
+    });
+    return () => {
+      if (unsubPosts) unsubPosts();
+    };
+  }, [postLimit]);
+
+  const loadMorePosts = () => setPostLimit(prev => prev + 10);
 
   useEffect(() => {
     let unsubAuth: () => void;
@@ -76,9 +104,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUser(u);
         setLoading(false);
         if (u) {
+          const fid = u.familyId || u.uid;
           requestPushToken(u.uid);
-          ensureCurrentMonthPayment(u.uid); // This might use hardcoded 30 internally, we can fix later
-          unsubMyPayments = subscribeToMyPayments(u.uid, setMyPayments);
+          ensureCurrentMonthPayment(fid); // This might use hardcoded 30 internally, we can fix later
+          unsubMyPayments = subscribeToMyPayments(fid, setMyPayments);
           unsubPets = subscribeToMyPets(u.uid, setMyPets);
           unsubNotifs = subscribeToMyNotifications(u.uid, setMyNotifications);
           unsubAllExpenses = subscribeToAllExpenses(setAllExpenses);
@@ -146,10 +175,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       allPets,
       events,
       myNotifications,
+      posts,
+      loadMorePosts,
+      postLimit,
       login: handleLogin,
       logout: handleLogout,
       isRealBackend,
-      toggleMockRole
+      toggleMockRole,
+      viewProfileId,
+      setViewProfileId,
+      viewPetId,
+      setViewPetId,
+      fullscreenImage,
+      setFullscreenImage
     }}>
       {children}
     </AppContext.Provider>

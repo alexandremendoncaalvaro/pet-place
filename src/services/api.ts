@@ -1,4 +1,5 @@
-import { Role, UserProfile, Payment, Expense, PaymentStatus, AppConfig, Pet, AppEvent, AppNotification } from '../lib/types';
+import { Role, UserProfile, Payment, Expense, PaymentStatus, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
+import imageCompression from 'browser-image-compression';
 import { format } from 'date-fns';
 
 let db: any = null;
@@ -7,8 +8,8 @@ let storage: any = null;
 let app: any = null;
 export let isRealBackend = false;
 
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, orderBy, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
 import { getMessaging, getToken } from 'firebase/messaging';
 
@@ -32,9 +33,10 @@ export async function initFirebase() {
 
 // In-Memory mock state
 const MOCK_USERS: UserProfile[] = [
-  { uid: 'mock-admin', name: 'João (Admin)', phone: '11999999999', dogName: 'Rex', role: 'admin', email: 'admin@pet.com', createdAt: new Date().toISOString() },
-  { uid: 'mock-resident', name: 'Maria', phone: '11988888888', dogName: 'Thor e Fofa', role: 'resident', email: 'maria@pet.com', createdAt: new Date().toISOString() },
-  { uid: 'mock-res-2', name: 'Carlos', phone: '11977777777', dogName: 'Thor', role: 'resident', email: 'carlos@pet.com', createdAt: new Date().toISOString() }
+  { uid: 'mock-admin', name: 'João (Admin)', phone: '11999999999', dogName: 'Rex', role: 'admin', email: 'admin@pet.com', userStatus: 'active', createdAt: new Date().toISOString() },
+  { uid: 'mock-resident', name: 'Maria', phone: '11988888888', dogName: 'Thor e Fofa', role: 'resident', email: 'maria@pet.com', userStatus: 'active', createdAt: new Date().toISOString() },
+  { uid: 'mock-res-2', name: 'Carlos', phone: '11977777777', dogName: 'Thor', role: 'resident', email: 'carlos@pet.com', userStatus: 'active', createdAt: new Date().toISOString() },
+  { uid: 'mock-pending', name: 'Ana (Pendente)', phone: '11966666666', dogName: 'Bolinha', role: 'resident', email: 'ana@pet.com', userStatus: 'pending', createdAt: new Date().toISOString() }
 ];
 
 let MOCK_PETS: Pet[] = [
@@ -52,6 +54,15 @@ let MOCK_NOTIFICATIONS: AppNotification[] = [
   { id: 'n2', userId: 'all', title: 'Boletim Semanal', message: 'Confira as novidades do mês no painel.', isRead: true, createdAt: new Date().toISOString() }
 ];
 
+let MOCK_POSTS: AppPost[] = [
+  { id: 'post1', authorId: 'mock-resident', content: 'Olha que dia lindo no Pet Place!', likedBy: [], createdAt: new Date().toISOString() },
+  { id: 'post2', authorId: 'mock-admin', content: 'Fofa brincando com a bolinha nova.', likedBy: ['mock-resident'], createdAt: new Date(Date.now() - 86400000).toISOString() }
+];
+
+let MOCK_POST_COMMENTS: any[] = [
+  { id: 'comment1', postId: 'post1', authorId: 'mock-resident', content: 'Que lugar bacana!', createdAt: new Date().toISOString() }
+];
+
 let currentUserUid = 'mock-resident';
 let currentMockRole = 'resident';
 
@@ -61,9 +72,9 @@ export function setMockRole(role: 'admin' | 'resident') {
 }
 
 const MOCK_PAYMENTS: Payment[] = [
-  { id: 'p1', userId: 'mock-resident', month: '2026-04', amount: 30, proofUrl: 'https://placehold.co/400x600?text=Comprovante', status: 'approved', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'p2', userId: 'mock-resident', month: '2026-05', amount: 30, proofUrl: '', status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'p3', userId: 'mock-res-2', month: '2026-05', amount: 30, proofUrl: 'https://placehold.co/400x600?text=Comprovante', status: 'analyzing', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  { id: 'p1', familyId: 'mock-resident', month: '2026-04', amount: 30, proofUrl: 'https://placehold.co/400x600?text=Comprovante', status: 'approved', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'p2', familyId: 'mock-resident', month: '2026-05', amount: 30, proofUrl: '', status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'p3', familyId: 'mock-res-2', month: '2026-05', amount: 30, proofUrl: 'https://placehold.co/400x600?text=Comprovante', status: 'analyzing', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 const MOCK_EXPENSES: Expense[] = [
@@ -107,15 +118,17 @@ export async function loginWithGoogle(): Promise<UserProfile | null> {
     return data;
   } else {
     // Determine if bootstrapped admin
-    const role = user.email === 'peritto@gmail.com' ? 'admin' : 'resident';
+    const isAdminUser = user.email === 'peritto@gmail.com';
+    const role = isAdminUser ? 'admin' : 'resident';
     const newProfile: UserProfile = {
       uid: user.uid,
-      name: user.displayName || 'Novo Morador',
+      name: user.displayName || 'Nova Pessoa',
       phone: '',
       dogName: '',
       photoUrl: user.photoURL || '',
       role: role,
       email: user.email || '',
+      userStatus: isAdminUser ? 'active' : 'pending',
       createdAt: new Date().toISOString()
     };
     await setDoc(docRef, newProfile);
@@ -139,7 +152,7 @@ export async function logout() {
 export async function requestPushToken(userId: string) {
   if (!isRealBackend || !app) return;
   try {
-    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+    const vapidKey = (import.meta as any).env.VITE_FCM_VAPID_KEY;
     if (!vapidKey) return;
     const messaging = getMessaging(app);
     const permission = await window.Notification.requestPermission();
@@ -189,17 +202,24 @@ export function subscribeToAuth(callback: (user: UserProfile | null) => void) {
 }
 
 // Ensure the month exists for user
-export async function ensureCurrentMonthPayment(userId: string) {
+let ensuringLock = new Set<string>();
+
+export async function ensureCurrentMonthPayment(familyId: string) {
   const currentMonth = format(new Date(), 'yyyy-MM');
+  const lockKey = `${familyId}_${currentMonth}`;
+  
+  if (ensuringLock.has(lockKey)) return;
+  ensuringLock.add(lockKey);
+
   let defaultAmount = 30;
   
   if (!isRealBackend) {
     defaultAmount = MOCK_CONFIG.monthlyAmount;
-    const exists = MOCK_PAYMENTS.find(p => p.userId === userId && p.month === currentMonth);
+    const exists = MOCK_PAYMENTS.find(p => p.familyId === familyId && p.month === currentMonth);
     if (!exists) {
       MOCK_PAYMENTS.push({
         id: 'p' + Math.random(),
-        userId,
+        familyId,
         month: currentMonth,
         amount: defaultAmount,
         proofUrl: '',
@@ -208,6 +228,7 @@ export async function ensureCurrentMonthPayment(userId: string) {
         updatedAt: new Date().toISOString()
       });
     }
+    ensuringLock.delete(lockKey);
     return;
   }
   
@@ -218,29 +239,49 @@ export async function ensureCurrentMonthPayment(userId: string) {
     }
   } catch(e) {}
   
-  const paymentsQuery = query(collection(db, 'payments'), where('userId', '==', userId), where('month', '==', currentMonth));
-  const snap = await getDocs(paymentsQuery);
-  if (snap.empty) {
-    const newDoc = doc(collection(db, 'payments'));
-    const payment = {
-      userId,
-      month: currentMonth,
-      amount: defaultAmount,
-      proofUrl: '',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    await setDoc(newDoc, payment);
+  try {
+    const paymentsQuery = query(collection(db, 'payments'), where('familyId', '==', familyId), where('month', '==', currentMonth));
+    const snap = await getDocs(paymentsQuery);
+    
+    if (snap.empty) {
+      const newDoc = doc(collection(db, 'payments'));
+      const payment = {
+        familyId,
+        month: currentMonth,
+        amount: defaultAmount,
+        proofUrl: '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(newDoc, payment);
+    } else if (snap.size > 1) {
+      // Cleanup duplicates created by race condition
+      const docs = snap.docs.map(d => ({ id: d.id, data: d.data() as Payment }));
+      docs.sort((a, b) => {
+        const statuses = { approved: 4, analyzing: 3, pending: 2, rejected: 1 };
+        return (statuses[b.data.status as keyof typeof statuses] || 0) - (statuses[a.data.status as keyof typeof statuses] || 0);
+      });
+      // Keep the most advanced status payment, delete the others if they are just pending
+      for (let i = 1; i < docs.length; i++) {
+        if (docs[i].data.status === 'pending') {
+          await deleteDoc(doc(db, 'payments', docs[i].id)).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not ensure current month payment", e);
+  } finally {
+    ensuringLock.delete(lockKey);
   }
 }
 
-export function subscribeToMyPayments(userId: string, callback: (payments: Payment[]) => void) {
+export function subscribeToMyPayments(familyId: string, callback: (payments: Payment[]) => void) {
   if (!isRealBackend) {
-    callback(MOCK_PAYMENTS.filter(p => p.userId === userId));
+    callback(MOCK_PAYMENTS.filter(p => p.familyId === familyId));
     return () => {};
   }
-  const q = query(collection(db, 'payments'), where('userId', '==', userId), orderBy('month', 'desc'));
+  const q = query(collection(db, 'payments'), where('familyId', '==', familyId), orderBy('month', 'desc'));
   return onSnapshot(q, snap => {
     callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as Payment)));
   }, handleFirestoreError);
@@ -299,6 +340,56 @@ export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
   }, handleFirestoreError);
 }
 
+async function compressImage(file: File) {
+  if (!file.type.startsWith('image/')) return file;
+  try {
+    return await imageCompression(file, {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1280,
+      useWebWorker: true,
+    });
+  } catch (error) {
+    console.error('Compression error', error);
+    return file;
+  }
+}
+
+export async function submitDonation(amount: number, file: File, familyId: string) {
+  if (!isRealBackend) {
+    MOCK_PAYMENTS.push({
+      id: `mock_donation_${Date.now()}`,
+      familyId,
+      month: format(new Date(), 'yyyy-MM'),
+      amount,
+      proofUrl: URL.createObjectURL(file),
+      status: 'analyzing',
+      type: 'doacao',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return;
+  }
+  try {
+    const paymentId = `donation_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+    const compressedFile = await compressImage(file);
+    const storageRef = ref(storage, `proofs/${paymentId}`);
+    await uploadBytes(storageRef, compressedFile);
+    const url = await getDownloadURL(storageRef);
+
+    const docRef = doc(db, 'payments', paymentId);
+    await setDoc(docRef, {
+      familyId,
+      month: format(new Date(), 'yyyy-MM'),
+      amount,
+      proofUrl: url,
+      status: 'analyzing',
+      type: 'doacao',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  } catch(e) { handleFirestoreError(e); }
+}
+
 export async function uploadProofAndSubmit(paymentId: string, file: File) {
   if (!isRealBackend) {
     const p = MOCK_PAYMENTS.find(p => p.id === paymentId);
@@ -312,8 +403,9 @@ export async function uploadProofAndSubmit(paymentId: string, file: File) {
   try {
     let url = '';
     try {
+      const compressedFile = await compressImage(file);
       const storageRef = ref(storage, `proofs/${paymentId}_${Date.now()}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, compressedFile);
       url = await getDownloadURL(storageRef);
     } catch (err) {
       console.error("Storage upload error:", err);
@@ -353,6 +445,32 @@ export async function rejectPayment(paymentId: string) {
       status: 'rejected',
       updatedAt: new Date().toISOString()
     });
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function createCharges(charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[]) {
+  if (!isRealBackend) {
+    charges.forEach(c => {
+      MOCK_PAYMENTS.push({
+        ...c,
+        id: `mock_charge_${Date.now()}_${Math.random()}`,
+        proofUrl: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    });
+    return;
+  }
+  try {
+    for (const charge of charges) {
+      const docRef = doc(collection(db, 'payments'));
+      await setDoc(docRef, {
+        ...charge,
+        proofUrl: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
   } catch(e) { handleFirestoreError(e); }
 }
 
@@ -408,12 +526,14 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
     if(data.phone !== undefined) safeData.phone = data.phone;
     if(data.dogName !== undefined) safeData.dogName = data.dogName;
     if(data.role !== undefined) safeData.role = data.role;
+    if(data.familyId !== undefined) safeData.familyId = data.familyId;
+    if(data.userStatus !== undefined) safeData.userStatus = data.userStatus;
     
     // Fallbacks for missing fields in older documents to satisfy strict Firestore schema rules
     if (existing.dogName === undefined && safeData.dogName === undefined) safeData.dogName = '';
     if (existing.phone === undefined && safeData.phone === undefined) safeData.phone = '';
     if (existing.role === undefined && safeData.role === undefined) safeData.role = 'resident';
-    
+
     if (photoFile) {
       try {
         const storageRef = ref(storage, `users/${userId}_${Date.now()}`);
@@ -439,6 +559,7 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
     if(safeData.dogName !== undefined) publicData.dogName = safeData.dogName;
     if(safeData.role !== undefined) publicData.role = safeData.role;
     if(safeData.photoUrl !== undefined) publicData.photoUrl = safeData.photoUrl;
+    if(safeData.familyId !== undefined) publicData.familyId = safeData.familyId;
 
     if (pubSnap.exists()) {
       if (Object.keys(publicData).length > 0) {
@@ -446,14 +567,18 @@ export async function updateProfile(userId: string, data: Partial<UserProfile>, 
       }
     } else {
       // Create if it doesn't exist
-      await setDoc(publicRef, {
+      const newDocData: any = {
         uid: userId,
         name: safeData.name ?? existing.name ?? '',
         photoUrl: safeData.photoUrl ?? existing.photoUrl ?? '',
         dogName: safeData.dogName ?? existing.dogName ?? '',
         role: safeData.role ?? existing.role ?? 'resident',
         createdAt: existing.createdAt ?? new Date().toISOString()
-      });
+      };
+      if (safeData.familyId || existing.familyId) {
+        newDocData.familyId = safeData.familyId || existing.familyId;
+      }
+      await setDoc(publicRef, newDocData);
     }
   } catch(e) { handleFirestoreError(e); }
 }
@@ -683,8 +808,183 @@ export async function addNotification(data: Omit<AppNotification, 'id' | 'create
   } catch(e) { handleFirestoreError(e); }
 }
 
+export function subscribeToAllPosts(limitAmount: number, callback: (posts: AppPost[]) => void) {
+  if (!isRealBackend) {
+    callback([...MOCK_POSTS].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limitAmount));
+    return () => {};
+  }
+  const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(limitAmount));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AppPost)));
+  }, handleFirestoreError);
+}
+
+export async function addPost(data: Omit<AppPost, 'id' | 'createdAt' | 'likedBy'>, mediaFile?: File) {
+  if (!isRealBackend) {
+    const newId = Date.now().toString();
+    const mediaUrl = mediaFile ? URL.createObjectURL(mediaFile) : undefined;
+    MOCK_POSTS.push({ ...data, id: newId, mediaUrl, likedBy: [], createdAt: new Date().toISOString() });
+    return newId;
+  }
+  try {
+    const d = doc(collection(db, 'posts'));
+    let url = data.mediaUrl;
+    if (mediaFile) {
+      const fileToUpload = data.mediaType === 'image' ? await compressImage(mediaFile) : mediaFile;
+      const storageRef = ref(storage, `posts/${Date.now()}_${mediaFile.name}`);
+      await uploadBytes(storageRef, fileToUpload);
+      url = await getDownloadURL(storageRef);
+    }
+    await setDoc(d, {
+      ...data,
+      ...(url && { mediaUrl: url }),
+      likedBy: [],
+      createdAt: new Date().toISOString()
+    });
+    return d.id;
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function deletePost(postId: string) {
+  if (!isRealBackend) {
+    MOCK_POSTS = MOCK_POSTS.filter(e => e.id !== postId);
+    return;
+  }
+  try {
+    const postRef = doc(db, 'posts', postId);
+    const postSnap = await getDoc(postRef);
+    if (!postSnap.exists()) return;
+    const postData = postSnap.data() as AppPost;
+
+    if (postData.mediaUrl && postData.mediaUrl.includes('firebasestorage')) {
+      const storageRef = ref(storage, postData.mediaUrl);
+      await deleteObject(storageRef).catch(() => console.error('Failed to delete media'));
+    }
+
+    const commentsQ = query(collection(db, 'postComments'), where('postId', '==', postId));
+    const commentsSnap = await getDocs(commentsQ);
+    for (const commentDoc of commentsSnap.docs) {
+      await deleteDoc(commentDoc.ref).catch(() => {});
+    }
+    await deleteDoc(postRef);
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function updatePost(postId: string, content: string, tags: string[]) {
+  if (!isRealBackend) {
+    const p = MOCK_POSTS.find(x => x.id === postId);
+    if (p) {
+      p.content = content;
+      p.tags = tags;
+    }
+    return;
+  }
+  try {
+    await updateDoc(doc(db, 'posts', postId), { content, tags });
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export function subscribeToComments(postId: string, callback: (comments: any[]) => void) {
+  if (!isRealBackend) {
+    const fn = () => {
+      callback([...MOCK_POST_COMMENTS].filter(c => c.postId === postId).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    };
+    fn();
+    // Simulate real-time by polling or interval for mock, or just let it update on explicit events
+    const interval = setInterval(fn, 2000);
+    return () => clearInterval(interval);
+  }
+  const q = query(collection(db, 'postComments'), where('postId', '==', postId), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  }, handleFirestoreError);
+}
+
+export async function addComment(postId: string, authorId: string, content: string) {
+  if (!isRealBackend) {
+    MOCK_POST_COMMENTS.push({ id: Date.now().toString(), postId, authorId, content, createdAt: new Date().toISOString() });
+    return;
+  }
+  try {
+    const d = doc(collection(db, 'postComments'));
+    await setDoc(d, {
+      postId,
+      authorId,
+      content,
+      createdAt: new Date().toISOString()
+    });
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function deleteComment(commentId: string) {
+  if (!isRealBackend) {
+    MOCK_POST_COMMENTS = MOCK_POST_COMMENTS.filter(c => c.id !== commentId);
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, 'postComments', commentId));
+  } catch(e) { handleFirestoreError(e); }
+}
+
+export async function togglePostLike(postId: string, userId: string, currentlyLiked: boolean) {
+  if (!isRealBackend) {
+    const p = MOCK_POSTS.find(x => x.id === postId);
+    if (p) {
+      if (currentlyLiked) p.likedBy = p.likedBy.filter(x => x !== userId);
+      else if (!p.likedBy.includes(userId)) p.likedBy.push(userId);
+    }
+    return;
+  }
+  try {
+    const refDoc = doc(db, 'posts', postId);
+    const snap = await getDoc(refDoc);
+    if (snap.exists()) {
+      const p = snap.data() as AppPost;
+      const likedBy = p.likedBy || [];
+      const newLikedBy = currentlyLiked ? likedBy.filter(x => x !== userId) : [...new Set([...likedBy, userId])];
+      await updateDoc(refDoc, { likedBy: newLikedBy });
+    }
+  } catch(e) { handleFirestoreError(e); }
+}
+
 function handleFirestoreError(error: unknown) {
   console.error("Firestore error:", error);
   // Ideally parse exactly into FirestoreErrorInfo
   throw error;
+}
+
+export async function deleteUserAndData(userId: string) {
+  if (!isRealBackend) {
+    const index = MOCK_USERS.findIndex(u => u.uid === userId);
+    if (index > -1) MOCK_USERS.splice(index, 1);
+    return;
+  }
+  try {
+    // 1. Delete all pets of the user
+    const petsQ = query(collection(db, 'pets'), where('ownerId', '==', userId));
+    const petsSnap = await getDocs(petsQ);
+    for (const petDoc of petsSnap.docs) {
+      await deleteDoc(petDoc.ref).catch(() => {});
+    }
+
+    // 2. Delete all posts of the user
+    const postsQ = query(collection(db, 'posts'), where('authorId', '==', userId));
+    const postsSnap = await getDocs(postsQ);
+    for (const postDoc of postsSnap.docs) {
+      await deleteDoc(postDoc.ref).catch(() => {});
+    }
+    
+    // 3. Delete payments tied to familyId
+    const paymentsQ = query(collection(db, 'payments'), where('familyId', '==', userId));
+    const paymentsSnap = await getDocs(paymentsQ);
+    for (const payDoc of paymentsSnap.docs) {
+      await deleteDoc(payDoc.ref).catch(() => {});
+    }
+
+    // 4. Delete from public_profiles
+    await deleteDoc(doc(db, 'public_profiles', userId)).catch(() => {});
+
+    // 5. Delete user profile
+    await deleteDoc(doc(db, 'users', userId)).catch(() => {});
+  } catch (e) { handleFirestoreError(e); }
 }

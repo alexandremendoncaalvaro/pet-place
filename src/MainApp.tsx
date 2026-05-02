@@ -8,10 +8,14 @@ import { AdminPanel } from './components/AdminPanel';
 import { ProfileView } from './components/ProfileView';
 import { MuralView } from './components/MuralView';
 import { DirectoryView } from './components/DirectoryView';
+import { GlobalModals } from './components/GlobalModals';
+import { CreatePostModal } from './components/CreatePostModal';
+import { Plus } from 'lucide-react';
 
 export function MainApp() {
   const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications } = useApp();
   const [activeTab, setActiveTab] = useState<'home' | 'mural' | 'transparencia' | 'admin' | 'perfil' | 'directory'>('home');
+  const [showCreatePost, setShowCreatePost] = useState(false);
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-gray-500 animate-pulse text-lg">Carregando Caixinha...</div>;
@@ -37,6 +41,46 @@ export function MainApp() {
               <AlertCircle size={14} className="mr-2" /> Modo Demo (Sem Backend)
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (user.userStatus === 'pending') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
+        <div className="bg-white max-w-sm w-full p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-6">
+            <AlertCircle size={32} />
+          </div>
+          <h1 className="text-2xl font-semibold mb-2 text-gray-800">Acesso Pendente</h1>
+          <p className="text-gray-500 mb-8 max-w-xs text-sm">Seu cadastro foi recebido! O administrador aprovará o seu acesso em breve.</p>
+          <button 
+            onClick={logout}
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-4 px-6 rounded-2xl transition-colors active:scale-95 touch-manipulation"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user.userStatus === 'blocked') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
+        <div className="bg-white max-w-sm w-full p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6">
+            <AlertCircle size={32} />
+          </div>
+          <h1 className="text-2xl font-semibold mb-2 text-gray-800">Acesso Bloqueado</h1>
+          <p className="text-gray-500 mb-8 max-w-xs text-sm">Sua conta foi bloqueada. Entre em contato com a administração.</p>
+          <button 
+            onClick={logout}
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-4 px-6 rounded-2xl transition-colors active:scale-95 touch-manipulation"
+          >
+            Sair
+          </button>
         </div>
       </div>
     );
@@ -139,6 +183,18 @@ export function MainApp() {
           Trocar Papel Demo
         </button>
       )}
+
+      {/* Floating Action Button for Posting */}
+      <button 
+        onClick={() => setShowCreatePost(true)}
+        className="fixed bottom-[80px] sm:bottom-24 right-4 sm:right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-90 z-20"
+        aria-label="Nova publicação"
+      >
+        <Plus size={28} />
+      </button>
+
+      {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+      <GlobalModals />
     </div>
   );
 }

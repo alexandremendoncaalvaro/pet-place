@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, User, PawPrint, X } from 'lucide-react';
+import { Search, User, PawPrint, X, Users, Image as ImageIcon } from 'lucide-react';
+import { UserProfile, Pet } from '../lib/types';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { PostItem } from './PostItem';
 
 export function DirectoryView() {
-  const { publicProfiles, allPets } = useApp();
+  const { publicProfiles, allPets, setViewProfileId, setViewPetId } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'people' | 'pets'>('all');
-  const [fullscreenImage, setFullscreenImage] = useState<{url: string, title: string} | null>(null);
 
   const filteredProfiles = publicProfiles.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -16,6 +19,19 @@ export function DirectoryView() {
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.breed && p.breed.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const getFamilyMembers = (userId: string | undefined) => {
+    if (!userId) return [];
+    const userProfile = publicProfiles.find(p => p.uid === userId);
+    const familyId = userProfile?.familyId || userProfile?.uid;
+    return publicProfiles.filter(p => (p.familyId || p.uid) === familyId);
+  };
+
+  const getFamilyPets = (userId: string | undefined) => {
+    const members = getFamilyMembers(userId);
+    const memberIds = members.map(m => m.uid);
+    return allPets.filter(p => memberIds.includes(p.ownerId));
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-[calc(100vh-140px)]">
@@ -60,14 +76,19 @@ export function DirectoryView() {
 
       {filter !== 'pets' && (
         <div className="mb-8">
-          {filter === 'all' && <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">Moradores</h3>}
+          {filter === 'all' && <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">Pessoas</h3>}
           {filteredProfiles.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filteredProfiles.map(profile => (
-                <div key={profile.uid} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4">
+              {filteredProfiles.map(profile => {
+                const familyPets = getFamilyPets(profile.uid);
+                return (
+                <div 
+                  key={profile.uid} 
+                  className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:border-blue-200 transition-colors"
+                  onClick={() => setViewProfileId(profile.uid)}
+                >
                   <div 
-                    className={`w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300 ${profile.photoUrl ? 'cursor-pointer hover:opacity-90 active:scale-95 transition-all' : ''}`}
-                    onClick={() => profile.photoUrl && setFullscreenImage({url: profile.photoUrl, title: profile.name})}
+                    className={`w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300 ${profile.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                   >
                     {profile.photoUrl ? (
                       <img src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" />
@@ -77,16 +98,18 @@ export function DirectoryView() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-gray-800 truncate">{profile.name}</h4>
-                    <p className="text-xs text-blue-600 font-medium capitalize mt-1">{profile.role}</p>
-                    {profile.dogName && (
-                      <div className="mt-2 text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max">
-                        <PawPrint size={12} className="mr-1.5" />
-                        Tutor de: <strong className="ml-1 text-gray-700">{profile.dogName}</strong>
+                    <p className="text-xs text-blue-600 font-medium capitalize mt-1 border border-blue-100 bg-blue-50 px-2 py-0.5 rounded-md w-max">{profile.role}</p>
+                    {familyPets.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max border border-gray-200">
+                          <PawPrint size={12} className="mr-1.5 text-blue-500" />
+                          <span className="truncate max-w-[120px] sm:max-w-[150px]">{familyPets.map(p => p.name).join(', ')}</span>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400 text-sm bg-white rounded-3xl border border-dashed border-gray-200">
@@ -97,17 +120,20 @@ export function DirectoryView() {
       )}
 
       {filter !== 'people' && (
-        <div>
+        <div className="mb-8">
           {filter === 'all' && <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">Pets</h3>}
           {filteredPets.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredPets.map(pet => {
-                const owner = publicProfiles.find(p => p.uid === pet.ownerId);
+                const responsiblePeople = getFamilyMembers(pet.ownerId);
                 return (
-                  <div key={pet.id} className="bg-white p-4 rounded-3xl shadow-sm border border-orange-100 flex items-center gap-4">
+                  <div 
+                    key={pet.id} 
+                    className="bg-white p-4 rounded-3xl shadow-sm border border-orange-100 flex items-center gap-4 cursor-pointer hover:border-orange-300 transition-colors"
+                    onClick={() => setViewPetId(pet.id)}
+                  >
                     <div 
-                      className={`w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5 ${pet.photoUrl ? 'cursor-pointer hover:opacity-90 active:scale-95 transition-all' : ''}`}
-                      onClick={() => pet.photoUrl && setFullscreenImage({url: pet.photoUrl, title: pet.name})}
+                      className={`w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5 ${pet.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                     >
                       {pet.photoUrl ? (
                         <img src={pet.photoUrl} alt={pet.name} className="w-full h-full object-cover rounded-full" />
@@ -118,10 +144,10 @@ export function DirectoryView() {
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold text-gray-800 truncate">{pet.name}</h4>
                       {pet.breed && <p className="text-xs text-orange-600 font-medium mt-1">{pet.breed}</p>}
-                      {owner && (
-                        <div className="mt-2 text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max">
-                          <User size={12} className="mr-1.5" />
-                          Tutor: <strong className="ml-1 text-gray-700">{owner.name}</strong>
+                      {responsiblePeople.length > 0 && (
+                        <div className="mt-2 text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max border border-gray-200">
+                          <User size={12} className="mr-1.5 text-blue-500" />
+                          <span className="truncate max-w-[120px] sm:max-w-[150px]">{responsiblePeople.map(p => p.name).join(', ')}</span>
                         </div>
                       )}
                     </div>
@@ -130,32 +156,10 @@ export function DirectoryView() {
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-sm bg-white rounded-3xl border border-dashed border-gray-200">
-              Nenhum pet encontrado
-            </div>
+             <div className="text-center py-8 text-gray-400 text-sm bg-white rounded-3xl border border-dashed border-gray-200">
+               Nenhum pet encontrado
+             </div>
           )}
-        </div>
-      )}
-
-      {fullscreenImage && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setFullscreenImage(null)}
-        >
-          <button 
-            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full transition-colors"
-            onClick={() => setFullscreenImage(null)}
-          >
-            <X size={24} />
-          </button>
-          <div className="max-w-4xl w-full max-h-[90vh] flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
-            <img 
-              src={fullscreenImage.url} 
-              alt={fullscreenImage.title} 
-              className="max-w-full max-h-[85vh] object-contain rounded-lg"
-            />
-            <p className="text-white font-medium bg-black/50 px-4 py-2 rounded-full">{fullscreenImage.title}</p>
-          </div>
         </div>
       )}
     </div>

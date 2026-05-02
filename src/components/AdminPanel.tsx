@@ -2,12 +2,12 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent } from '../services/api';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData } from '../services/api';
 import { Payment } from '../lib/types';
 
 export function AdminPanel() {
   const { allPayments, allUsers, appConfig } = useApp();
-  const [tab, setTab] = useState<'approvals' | 'expense' | 'users' | 'settings' | 'comms'>('approvals');
+  const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
 
   return (
     <div className="p-6 max-w-lg mx-auto pb-24 space-y-6">
@@ -25,6 +25,12 @@ export function AdminPanel() {
           className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
         >
           Despesa
+        </button>
+        <button 
+          onClick={() => setTab('rateio')}
+          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'rateio' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+        >
+          Rateio
         </button>
         <button 
           onClick={() => setTab('users')}
@@ -55,35 +61,73 @@ export function AdminPanel() {
              </div>
           ) : (
             allPayments.filter(p => p.status === 'analyzing').map(payment => {
-              const u = allUsers.find(x => x.uid === payment.userId);
-              return <ApprovalCard key={payment.id} payment={payment} userName={u?.name} />;
+              const u = allUsers.find(x => x.familyId === payment.familyId || x.uid === payment.familyId);
+              return <ApprovalCard key={payment.id} payment={payment} userName={u?.name ? u.name + ' (Família)' : 'Família'} />;
             })
           )}
         </div>
       )}
 
       {tab === 'expense' && <ExpenseForm />}
+      {tab === 'rateio' && <RateioForm />}
 
       {tab === 'users' && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-gray-800 text-lg mb-2">Moradores ({allUsers.length})</h3>
+        <div className="space-y-4">
+          <h3 className="font-semibold text-gray-800 text-lg mb-2">Pessoas ({allUsers.length})</h3>
           {allUsers.map(u => (
-            <div key={u.uid} className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-800 text-sm">{u.name}</p>
-                <p className="text-xs text-gray-500">Contato: {u.phone || '-'}</p>
+            <div key={u.uid} className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col gap-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-800 text-sm">{u.name}</p>
+                    {u.userStatus === 'pending' && <span className="text-[10px] uppercase font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Pendente</span>}
+                    {u.userStatus === 'blocked' && <span className="text-[10px] uppercase font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Bloqueado</span>}
+                    {u.userStatus === 'active' && <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Ativo</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">Contato: {u.phone || '-'}</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    const isAdmin = u.role === 'admin';
+                    if(confirm(`Mudar papel de ${u.name} para ${isAdmin ? 'Pessoa' : 'Admin'}?`)) {
+                      updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
+                    }
+                  }}
+                  className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
+                >
+                  {u.role === 'admin' ? 'Admin' : 'Pessoa'}
+                </button>
               </div>
-              <button 
-                onClick={() => {
-                  const isAdmin = u.role === 'admin';
-                  if(confirm(`Mudar papel de ${u.name} para ${isAdmin ? 'Morador' : 'Admin'}?`)) {
-                    updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
-                  }
-                }}
-                className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
-              >
-                {u.role === 'admin' ? 'Admin' : 'Morador'}
-              </button>
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+                {u.userStatus === 'pending' && (
+                  <button 
+                    onClick={() => updateProfile(u.uid, { userStatus: 'active' })}
+                    className="flex-1 text-xs bg-emerald-500 active:bg-emerald-600 text-white py-1.5 rounded-lg font-medium transition-colors"
+                  >
+                    Aprovar Acesso
+                  </button>
+                )}
+                {u.userStatus !== 'pending' && (
+                  <button 
+                    onClick={() => updateProfile(u.uid, { userStatus: u.userStatus === 'blocked' ? 'active' : 'blocked' })}
+                    className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors ${u.userStatus === 'blocked' ? 'bg-amber-100 text-amber-700 active:bg-amber-200' : 'bg-orange-100 text-orange-700 active:bg-orange-200'}`}
+                  >
+                    {u.userStatus === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                )}
+                <button 
+                  onClick={async () => {
+                    const typed = prompt(`Isso excluirá DEFINITIVAMENTE os dados, posts e pets de ${u.name}. Digite EXCLUIR para confirmar.`);
+                    if(typed === 'EXCLUIR') {
+                      await deleteUserAndData(u.uid);
+                      alert('Usuário e seus dados foram apagados da base.');
+                    }
+                  }}
+                  className="flex-1 text-xs bg-red-100 active:bg-red-200 text-red-600 py-1.5 rounded-lg font-medium transition-colors"
+                >
+                  Excluir Dados (LGPD)
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -194,10 +238,13 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
 
   return (
     <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-start mb-4">
         <div>
           <h4 className="font-semibold text-gray-800">{userName || 'User'}</h4>
-          <span className="text-xs text-gray-400">Ref: {payment.month}</span>
+          <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-md mt-1 inline-block">
+            {payment.type === 'doacao' ? 'Doação' : payment.type === 'rateio' ? 'Rateio' : 'Mensalidade'} • Ref: {payment.month}
+          </span>
+          {payment.description && <p className="text-sm text-gray-600 mt-1">{payment.description}</p>}
         </div>
         <span className="font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl text-sm">
           R$ {payment.amount.toFixed(2)}
@@ -302,6 +349,141 @@ function ExpenseForm() {
   );
 }
 
+function RateioForm() {
+  const { allUsers } = useApp();
+  const [desc, setDesc] = useState('');
+  const [amountStr, setAmountStr] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+
+  // Active users only to avoid charging pending/blocked people unless desired, but let's just show all active
+  const selectableUsers = allUsers.filter(u => u.userStatus === 'active' || u.userStatus === undefined);
+
+  const handleToggleUser = (uid: string) => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (selectAll: boolean) => {
+    if (selectAll) {
+      setSelectedUsers(new Set(selectableUsers.map(u => u.uid)));
+    } else {
+      setSelectedUsers(new Set());
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!desc.trim()) return alert("Adicione uma descrição do rateio.");
+    const amt = parseFloat(amountStr);
+    if (!amt || amt <= 0) return alert("Adicione um valor válido para dividir.");
+    if (selectedUsers.size === 0) return alert("Selecione pelo menos uma pessoa.");
+    
+    const valuePerPerson = amt / selectedUsers.size;
+    const isConfirmed = confirm(`O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas.\nCada pessoa pagará: R$ ${valuePerPerson.toFixed(2)}.\nConfirma?`);
+    if (!isConfirmed) return;
+
+    setLoading(true);
+    
+    // Group charges by family
+    const familyCharges: Record<string, number> = {};
+    for (const uid of selectedUsers) {
+      const user = selectableUsers.find(u => u.uid === uid);
+      if (user) {
+        const fId = user.familyId || user.uid;
+        familyCharges[fId] = (familyCharges[fId] || 0) + valuePerPerson;
+      }
+    }
+
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[] = Object.entries(familyCharges).map(([familyId, amount]) => ({
+      familyId,
+      month: currentMonth,
+      amount,
+      status: 'pending',
+      type: 'rateio',
+      description: desc.trim()
+    }));
+
+    await createCharges(charges);
+    
+    setLoading(false);
+    alert('Rateio gerado com sucesso! As famílias verão a cobrança agregada.');
+    setDesc('');
+    setAmountStr('');
+    setSelectedUsers(new Set());
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+      <div>
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">O que é este rateio?</label>
+        <input 
+          type="text" 
+          value={desc}
+          onChange={e => setDesc(e.target.value)}
+          placeholder="Ex: Churrasco de Junho"
+          required
+          className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-600"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Valor Total p/ Dividir (R$)</label>
+        <input 
+          type="number" 
+          step="0.01" 
+          value={amountStr}
+          onChange={e => setAmountStr(e.target.value)}
+          required
+          placeholder="0.00"
+          className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-600"
+        />
+      </div>
+      
+      <div className="pt-2">
+        <div className="flex items-center justify-between mb-3 text-sm">
+          <label className="font-semibold text-gray-800">Pessoas a cobrar ({selectedUsers.size} sel.)</label>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => handleSelectAll(true)} className="text-blue-600 font-medium">Todas</button>
+            <button type="button" onClick={() => handleSelectAll(false)} className="text-red-500 font-medium">Nenhuma</button>
+          </div>
+        </div>
+        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 pb-2 hide-scrollbar">
+          {selectableUsers.map(u => {
+            const isSelected = selectedUsers.has(u.uid);
+            return (
+              <div 
+                key={u.uid} 
+                className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer select-none transition-colors ${isSelected ? 'bg-blue-50/50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}
+                onClick={() => handleToggleUser(u.uid)}
+              >
+                <div className={`w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600' : 'bg-white border border-gray-300'}`}>
+                  {isSelected && <CheckCircle2 size={14} className="text-white" />}
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>{u.name}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <button 
+        disabled={loading}
+        type="submit"
+        className="w-full mt-4 bg-gray-900 active:bg-black text-white py-4 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
+      >
+        {loading ? 'Gerando...' : <><Plus size={20} className="mr-2" /> Gerar Cobranças</>}
+      </button>
+    </form>
+  );
+}
+
 function CommsForm() {
   const { user } = useApp();
   const [loading, setLoading] = useState(false);
@@ -332,7 +514,7 @@ function CommsForm() {
       });
       
       if ((type === 'event' && notifyNow) || type === 'announcement') {
-        const workerUrl = import.meta.env.VITE_WORKER_URL;
+        const workerUrl = (import.meta as any).env.VITE_WORKER_URL;
         if (workerUrl && eventId) {
           // Chama o worker para postar a notificação no DB e disparar via Push Nativo (FCM)
           await fetch(`${workerUrl.replace(/\/$/, '')}/notify-now`, {
@@ -384,7 +566,7 @@ function CommsForm() {
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Título</label>
         <input 
           required value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="Ex: Vacinação em breve"
+          placeholder={type === 'announcement' ? "Ex: Aplicação de veneno no mato." : "Ex: Churrasco de Junho"}
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
         />
       </div>
@@ -485,7 +667,7 @@ function CommsManager() {
                    {!isEvent && (
                      <div className="flex items-center gap-1">
                        <CheckCircle2 size={14} className={readCount === residentCount && residentCount > 0 ? "text-green-500" : "text-gray-400"} />
-                       Lido por {readCount} de {residentCount} moradores
+                       Lido por {readCount} de {residentCount} pessoas
                      </div>
                    )}
                    {isEvent && (

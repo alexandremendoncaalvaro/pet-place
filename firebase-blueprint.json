@@ -13,6 +13,7 @@
         "role": { "type": "string", "enum": ["admin", "resident"] },
         "email": { "type": "string" },
         "fcmToken": { "type": "string" },
+        "familyId": { "type": "string" },
         "createdAt": { "type": "string" }
       },
       "required": ["uid", "name", "role", "email", "createdAt"]
@@ -22,7 +23,7 @@
       "description": "Represents a resident's contribution.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
+        "familyId": { "type": "string" },
         "month": { "type": "string" },
         "amount": { "type": "number" },
         "proofUrl": { "type": "string" },
@@ -34,7 +35,7 @@
         "updatedAt": { "type": "string" }
       },
       "required": [
-        "userId",
+        "familyId",
         "month",
         "amount",
         "status",
@@ -122,6 +123,33 @@
       },
       "required": ["userId", "title", "message", "isRead", "createdAt"]
     },
+    "AppPost": {
+      "title": "AppPost",
+      "description": "User post for feed.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "content": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["image", "video"] },
+        "likedBy": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["authorId", "content", "likedBy", "createdAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "A comment on a post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["postId", "authorId", "content", "createdAt"]
+    },
     "AppConfig": {
       "title": "AppConfig",
       "description": "Global application configuration.",
@@ -170,6 +198,14 @@
     "notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/Notification" },
       "description": "Contains notifications."
+    },
+    "posts/{postId}": {
+      "schema": { "$ref": "#/entities/AppPost" },
+      "description": "Feed posts."
+    },
+    "postComments/{commentId}": {
+      "schema": { "$ref": "#/entities/PostComment" },
+      "description": "Comments on feed posts."
     }
   }
 }

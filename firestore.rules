@@ -33,13 +33,19 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function getUserFamilyId() {
+      let isUser = exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      let data = isUser ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : {};
+      return isUser && 'familyId' in data && data.familyId != "" ? data.familyId : request.auth.uid;
+    }
+
     function hasAllKeys(data, keys) {
       return data.keys().hasAll(keys) && data.keys().size() == keys.size();
     }
 
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt'])
-        && data.keys().hasOnly(['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt', 'fcmToken'])
+        && data.keys().hasOnly(['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt', 'fcmToken', 'familyId', 'userStatus'])
         && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100
         && data.name is string && data.name.size() <= 100
         && data.phone is string && data.phone.size() <= 20
@@ -47,17 +53,21 @@ service cloud.firestore {
         && data.photoUrl is string && data.photoUrl.size() <= 1000
         && data.role is string && data.role in ['admin', 'resident']
         && (!('fcmToken' in data) || data.fcmToken is string)
+        && (!('familyId' in data) || (data.familyId is string && data.familyId.size() <= 100))
+        && (!('userStatus' in data) || (data.userStatus is string && data.userStatus in ['pending', 'active', 'blocked']))
         && data.email is string && data.email.size() > 0 && data.email.size() <= 200
         && data.createdAt is string && data.createdAt.size() > 0;
     }
 
     function isValidPublicProfile(data) {
-      return hasAllKeys(data, ['uid', 'name', 'photoUrl', 'dogName', 'role', 'createdAt'])
+      return data.keys().hasAll(['uid', 'name', 'photoUrl', 'dogName', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'name', 'photoUrl', 'dogName', 'role', 'createdAt', 'familyId'])
         && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100
         && data.name is string && data.name.size() <= 100
         && data.photoUrl is string && data.photoUrl.size() <= 1000
         && data.dogName is string && data.dogName.size() <= 100
         && data.role is string && data.role in ['admin', 'resident']
+        && (!('familyId' in data) || (data.familyId is string && data.familyId.size() <= 100))
         && data.createdAt is string && data.createdAt.size() > 0;
     }
 
@@ -72,6 +82,7 @@ service cloud.firestore {
                     && incoming().uid == existing().uid
                     && incoming().createdAt == existing().createdAt
                     || (isAdmin() && isValidPublicProfile(incoming()));
+      allow delete: if isAdmin();
     }
 
     match /users/{userId} {
@@ -86,45 +97,49 @@ service cloud.firestore {
       
       allow update: if isOwner(userId) && isValidId(userId)
                     && isValidUser(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'dogName', 'photoUrl', 'fcmToken'])
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'dogName', 'photoUrl', 'fcmToken', 'familyId'])
                     && incoming().uid == existing().uid
                     && incoming().email == existing().email
                     && incoming().role == existing().role
                     && incoming().createdAt == existing().createdAt
                     || (isAdmin() && isValidUser(incoming()));
+      allow delete: if isAdmin();
     }
 
     function isValidPayment(data) {
-      return hasAllKeys(data, ['userId', 'month', 'amount', 'proofUrl', 'status', 'createdAt', 'updatedAt'])
-        && data.userId is string && data.userId.size() > 0 && data.userId.size() <= 100
+      return data.keys().hasAll(['familyId', 'month', 'amount', 'proofUrl', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().size() >= 7 && data.keys().size() <= 9
+        && data.familyId is string && data.familyId.size() > 0 && data.familyId.size() <= 100
         && data.month is string && data.month.size() > 0 && data.month.size() <= 20
         && data.amount is number && data.amount >= 0
         && data.proofUrl is string && data.proofUrl.size() <= 1000
         && data.status is string && data.status in ['pending', 'analyzing', 'approved', 'rejected']
+        && (!('type' in data) || (data.type is string && data.type in ['mensalidade', 'doacao', 'rateio']))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 200))
         && data.createdAt is string && data.createdAt.size() > 0
         && data.updatedAt is string && data.updatedAt.size() > 0;
     }
 
     match /payments/{paymentId} {
-      // Residents can read their own payments. Admins can read all.
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Residents can read their family's payments. Admins can read all.
+      allow read: if isSignedIn() && (resource.data.familyId == getUserFamilyId() || isAdmin());
       
       // Residents can create payments.
       allow create: if isSignedIn() && isValidId(paymentId)
                     && isValidPayment(incoming())
-                    && incoming().userId == request.auth.uid
+                    && incoming().familyId == getUserFamilyId()
                     && (incoming().status == 'pending' || incoming().status == 'analyzing');
 
-      // Residents can update their own payment to attach proof ('analyzing' status).
+      // Residents can update their family's payment to attach proof ('analyzing' status).
       // Admins can approve/reject.
       allow update: if isSignedIn() && isValidId(paymentId)
                     && isValidPayment(incoming())
-                    && incoming().userId == existing().userId
+                    && incoming().familyId == existing().familyId
                     && incoming().month == existing().month
                     && incoming().createdAt == existing().createdAt
                     && (
                       (
-                        incoming().userId == request.auth.uid
+                        incoming().familyId == getUserFamilyId()
                         && existing().status in ['pending', 'rejected']
                         && incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'proofUrl', 'status', 'updatedAt'])
                         && incoming().status == 'analyzing'
@@ -135,6 +150,9 @@ service cloud.firestore {
                         && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
                       )
                     );
+                    
+      // Admins can delete, or users can delete duplicate pending
+      allow delete: if isAdmin() || (isSignedIn() && existing().familyId == getUserFamilyId() && existing().status == 'pending');
     }
 
     function isValidExpense(data) {
@@ -268,6 +286,53 @@ service cloud.firestore {
                       || isAdmin()
                     );
       allow delete: if isAdmin() && isValidId(notificationId);
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['authorId', 'content', 'likedBy', 'createdAt'])
+        && data.keys().size() >= 4 && data.keys().size() <= 7
+        && data.authorId is string && data.authorId.size() > 0 && data.authorId.size() <= 100
+        && data.content is string && data.content.size() <= 2000
+        && (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 1000))
+        && (!('mediaType' in data) || (data.mediaType is string && data.mediaType in ['image', 'video']))
+        && data.likedBy is list && data.likedBy.size() <= 1000
+        && (data.likedBy.size() == 0 || data.likedBy[0] is string)
+        && (!('tags' in data) || (data.tags is list && data.tags.size() <= 20 && (data.tags.size() == 0 || data.tags[0] is string)))
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(postId) && isValidPost(incoming()) && incoming().authorId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(postId) && isValidPost(incoming())
+        && incoming().authorId == existing().authorId
+        && incoming().createdAt == existing().createdAt
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['likedBy'])
+          || (incoming().authorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'tags']))
+          || isAdmin()
+        );
+      allow delete: if isSignedIn() && isValidId(postId) && (existing().authorId == request.auth.uid || isAdmin());
+    }
+
+    function isValidPostComment(data) {
+      return data.keys().hasAll(['postId', 'authorId', 'content', 'createdAt'])
+        && data.keys().size() == 4
+        && data.postId is string && data.postId.size() > 0 && data.postId.size() <= 100
+        && data.authorId is string && data.authorId.size() > 0 && data.authorId.size() <= 100
+        && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /postComments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(commentId) && isValidPostComment(incoming()) && incoming().authorId == request.auth.uid && exists(/databases/$(database)/documents/posts/$(incoming().postId));
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(commentId) && (
+        existing().authorId == request.auth.uid 
+        || isAdmin() 
+        || (exists(/databases/$(database)/documents/posts/$(existing().postId)) && get(/databases/$(database)/documents/posts/$(existing().postId)).data.authorId == request.auth.uid)
+      );
     }
   }
 }

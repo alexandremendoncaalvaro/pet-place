@@ -10,16 +10,20 @@ export interface UserProfile {
   role: Role;
   email: string;
   fcmToken?: string;
+  familyId?: string;
+  userStatus?: 'pending' | 'active' | 'blocked';
   createdAt: string;
 }
 
 export interface Payment {
   id: string;
-  userId: string;
+  familyId: string;
   month: string;
   amount: number;
   proofUrl: string;
   status: PaymentStatus;
+  type?: 'mensalidade' | 'doacao' | 'rateio';
+  description?: string;
   createdAt: string;
   updatedAt: string;
   userName?: string; // transient for UI
@@ -66,6 +70,25 @@ export interface AppEvent {
   notifyNow?: boolean;
   readBy?: string[];
   createdBy: string;
+  createdAt: string;
+}
+
+export interface AppPost {
+  id: string;
+  authorId: string;
+  content: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
+  likedBy: string[];
+  tags?: string[];
+  createdAt: string;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  content: string;
   createdAt: string;
 }
 

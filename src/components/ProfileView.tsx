@@ -20,6 +20,11 @@ export function ProfileView() {
   const [petLoading, setPetLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [familyCode, setFamilyCode] = useState('');
+  const [showFamilyInput, setShowFamilyInput] = useState(false);
+  const [familyLoading, setFamilyLoading] = useState(false);
+
+  // ... handleSave starts below ...
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -32,6 +37,41 @@ export function ProfileView() {
       alert(`Erro ao atualizar perfil: ${err?.message || err}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJoinFamily = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !familyCode.trim()) return;
+    setFamilyLoading(true);
+    try {
+      if (familyCode.trim() === user.uid) {
+        alert('Você não pode entrar na sua própria família assim.');
+      } else {
+        await updateProfile(user.uid, { familyId: familyCode.trim() });
+        alert('Família vinculada com sucesso!');
+        setShowFamilyInput(false);
+        setFamilyCode('');
+      }
+    } catch (err: any) {
+      alert(`Erro ao vincular família: ${err?.message || err}`);
+    } finally {
+      setFamilyLoading(false);
+    }
+  };
+
+  const handleLeaveFamily = async () => {
+    if (!user) return;
+    if (confirm('Tem certeza que deseja sair deste grupo familiar?')) {
+      setFamilyLoading(true);
+      try {
+        await updateProfile(user.uid, { familyId: user.uid });
+        alert('Você saiu do grupo familiar.');
+      } catch (err: any) {
+        alert(`Erro ao atualizar perfil: ${err?.message || err}`);
+      } finally {
+        setFamilyLoading(false);
+      }
     }
   };
 
@@ -95,7 +135,7 @@ export function ProfileView() {
         </div>
         <input type="file" accept="image/*" ref={userFileInputRef} onChange={e => setUserPhoto(e.target.files?.[0] || null)} className="hidden" />
         <h2 className="text-xl font-semibold text-gray-800">{user?.name}</h2>
-        <p className="text-gray-500 text-sm capitalize">{user?.role === 'admin' ? 'Administrador' : 'Morador'}</p>
+        <p className="text-gray-500 text-sm capitalize">{user?.role === 'admin' ? 'Administrador' : 'Pessoa'}</p>
         <p className="text-gray-400 text-xs mt-1">{user?.email}</p>
       </div>
 
@@ -131,6 +171,74 @@ export function ProfileView() {
           {loading ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} className="mr-2" /> Salvar Perfil</>}
         </button>
       </form>
+
+      {/* Family Section */}
+      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-semibold text-gray-800 text-lg">Grupo Familiar</h3>
+        </div>
+        
+        {(!user?.familyId || user?.familyId === user?.uid) ? (
+          <div>
+            <p className="text-sm text-gray-500 mb-4">
+              Ao vincular sua conta à de outra pessoa, vocês poderão compartilhar os pagamentos e a visão dos mesmos pets.
+            </p>
+            
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
+              <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Seu Código de Convite</span>
+              <div className="flex items-center justify-between">
+                <code className="font-mono text-sm text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">{user?.uid?.substring(0, 8)}...</code>
+                <button 
+                  type="button"
+                  onClick={() => { navigator.clipboard.writeText(user?.uid || ''); alert('Código copiado!'); }}
+                  className="text-xs text-blue-600 font-medium"
+                >
+                  COPIAR
+                </button>
+              </div>
+            </div>
+
+            {!showFamilyInput ? (
+              <button 
+                type="button" 
+                onClick={() => setShowFamilyInput(true)} 
+                className="w-full text-blue-600 bg-blue-50 py-3 rounded-xl font-medium active:scale-95 transition-transform"
+              >
+                Vincular a outra conta
+              </button>
+            ) : (
+              <form onSubmit={handleJoinFamily} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <label className="text-xs font-medium text-gray-500 uppercase">Código da Família</label>
+                <input 
+                  required 
+                  value={familyCode} 
+                  onChange={e => setFamilyCode(e.target.value)} 
+                  placeholder="Cole o código do responsável aqui..."
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm" 
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowFamilyInput(false)} className="flex-1 text-sm bg-gray-200 text-gray-700 py-2 rounded-xl">Cancelar</button>
+                  <button disabled={familyLoading} type="submit" className="flex-1 text-sm bg-blue-600 text-white py-2 rounded-xl disabled:opacity-50">Confirmar</button>
+                </div>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-start gap-2">
+            <p className="text-sm text-blue-800">
+              Você está vinculado a um grupo familiar. Os pets da sua família também aparecem para você.
+            </p>
+            <button 
+              disabled={familyLoading}
+              type="button" 
+              onClick={handleLeaveFamily}
+              className="text-sm bg-white text-red-600 font-medium border border-red-200 px-4 py-2 rounded-xl mt-2 active:scale-95 disabled:opacity-50"
+            >
+              Remover Vínculo
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Pets Section */}
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
