@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, User, PawPrint, X, Users, Image as ImageIcon } from 'lucide-react';
+import { Search, User, PawPrint, X, Users, Image as ImageIcon, Info } from 'lucide-react';
 import { UserProfile, Pet } from '../lib/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PostItem } from './PostItem';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
+import { AboutModal } from './AboutModal';
 
 export function DirectoryView() {
   const { publicProfiles, allPets, setViewProfileId, setViewPetId } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'people' | 'pets'>('all');
+  const [showAbout, setShowAbout] = useState(false);
 
   const filteredProfiles = publicProfiles.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -36,6 +38,23 @@ export function DirectoryView() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-[calc(100vh-140px)]">
+      
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+
+      {/* Banner Sobre */}
+      <div 
+        onClick={() => setShowAbout(true)}
+        className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-3xl mb-6 shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-4 cursor-pointer"
+      >
+        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+          <Info size={24} className="text-white" />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-bold text-sm tracking-wide">Sobre o Pet Place</h3>
+          <p className="text-xs text-blue-100 mt-1 leading-tight">Como surgiu nosso projeto, segurança e regras da nossa comunidade.</p>
+        </div>
+      </div>
+
       <div className="mb-6 flex justify-between items-end">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Comunidade</h2>
