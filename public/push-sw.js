@@ -34,8 +34,8 @@ async function showLatestNotification() {
 
   await self.registration.showNotification(title, {
     body,
-    icon: '/vite.svg',
-    badge: '/vite.svg',
+    icon: '/icon.svg',
+    badge: '/icon.svg',
     vibrate: [200, 100, 200],
     tag: 'caixinha-notification',
     renotify: true,
