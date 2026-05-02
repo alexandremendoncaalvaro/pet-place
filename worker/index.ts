@@ -62,25 +62,58 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
   const path = url.pathname.replace(/^\/api/, '') || '/';
   const method = request.method;
 
+  const publicResponse = await routePublicApi(path, method, request, env);
+  if (publicResponse) return publicResponse;
+
+  const user = await requireUser(request, env);
+  const authenticatedResponse =
+    await routeSessionApi(path, method, user) ||
+    await routeMediaApi(path, method, request, env, user) ||
+    await routeConfigApi(path, method, request, env, user) ||
+    await routeUsersApi(path, method, request, env, user) ||
+    await routePaymentsApi(path, method, request, url, env, user) ||
+    await routeExpensesApi(path, method, request, env, user) ||
+    await routePetsApi(path, method, request, url, env, user) ||
+    await routeEventsApi(path, method, request, env, ctx, user) ||
+    await routeNotificationsApi(path, method, request, env, user) ||
+    await routePostsApi(path, method, request, url, env, user) ||
+    await routePushApi(path, method, request, env, user) ||
+    await routeBackupApi(path, method, env, user);
+
+  if (authenticatedResponse) return authenticatedResponse;
+  return bad('Rota nao encontrada.', 404);
+}
+
+async function routePublicApi(path: string, method: string, request: Request, env: Env): Promise<Response | null> {
   if (path === '/health') return json({ ok: true, service: 'caixinha-pet-place', time: now() });
   if (path === '/push/vapid-public-key') return json({ publicKey: env.VAPID_PUBLIC_KEY || '' });
-
   if (path === '/auth/google/start' && method === 'GET') return googleStart(request, env);
   if (path === '/auth/google/callback' && method === 'GET') return googleCallback(request, env);
   if (path === '/auth/logout' && method === 'POST') return logout(env);
+  return null;
+}
 
-  const user = await requireUser(request, env);
-
+async function routeSessionApi(path: string, method: string, user: CurrentUser): Promise<Response | null> {
   if (path === '/auth/me' && method === 'GET') return json({ user });
-  if (path === '/media' && method === 'GET') return bad('Caminho de mídia ausente.', 400);
-  if (path.startsWith('/media/') && method === 'GET') return serveMedia(path.slice('/media/'.length), request, env, user);
+  return null;
+}
 
+async function routeMediaApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path === '/media' && method === 'GET') return bad('Caminho de media ausente.', 400);
+  if (path.startsWith('/media/') && method === 'GET') return serveMedia(path.slice('/media/'.length), request, env, user);
+  return null;
+}
+
+async function routeConfigApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/config' && method === 'GET') return json({ config: await getConfig(env) });
   if (path === '/config' && method === 'PUT') {
     requireAdmin(user);
     return json({ config: await updateConfig(env, await request.json()) });
   }
+  return null;
+}
 
+async function routeUsersApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/users' && method === 'GET') {
     requireAdmin(user);
     return json({ users: await listUsers(env) });
@@ -92,7 +125,10 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     await deleteUser(env, path.split('/')[2]);
     return json({ ok: true });
   }
+  return null;
+}
 
+async function routePaymentsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/payments/ensure-current-month' && method === 'POST') return ensureCurrentMonthPaymentRoute(request, env, user);
   if (path === '/payments' && method === 'GET') return listPaymentsRoute(url, env, user);
   if (path === '/payments/charges' && method === 'POST') {
@@ -106,18 +142,27 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     return updatePaymentStatusRoute(request, env, path.split('/')[2]);
   }
   if (path.match(/^\/payments\/[^/]+$/) && method === 'DELETE') return deletePaymentRoute(env, user, path.split('/')[2]);
+  return null;
+}
 
+async function routeExpensesApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/expenses' && method === 'GET') return json({ expenses: await listExpenses(env) });
   if (path === '/expenses' && method === 'POST') {
     requireAdmin(user);
     return addExpenseRoute(request, env, user);
   }
+  return null;
+}
 
+async function routePetsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/pets' && method === 'GET') return json({ pets: await listPets(env, url.searchParams.get('ownerId') || undefined) });
   if (path === '/pets' && method === 'POST') return addPetRoute(request, env, user);
   if (path.match(/^\/pets\/[^/]+$/) && method === 'PATCH') return updatePetRoute(request, env, user, path.split('/')[2]);
   if (path.match(/^\/pets\/[^/]+$/) && method === 'DELETE') return deletePetRoute(env, user, path.split('/')[2]);
+  return null;
+}
 
+async function routeEventsApi(path: string, method: string, request: Request, env: Env, ctx: ExecutionContext, user: CurrentUser): Promise<Response | null> {
   if (path === '/events' && method === 'GET') return json({ events: await listEvents(env) });
   if (path === '/events' && method === 'POST') {
     requireAdmin(user);
@@ -137,12 +182,18 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     ctx.waitUntil(processImmediateNotification(env, body.eventId));
     return json({ ok: true });
   }
+  return null;
+}
 
+async function routeNotificationsApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/notifications' && method === 'GET') return json({ notifications: await listNotifications(env, user) });
   if (path === '/notifications/latest' && method === 'GET') return json({ notification: await latestNotification(env, user) });
   if (path === '/notifications' && method === 'POST') return addNotificationRoute(request, env, user);
   if (path.match(/^\/notifications\/[^/]+\/read$/) && method === 'PATCH') return markNotificationRead(env, user, path.split('/')[2]);
+  return null;
+}
 
+async function routePostsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/posts' && method === 'GET') return json({ posts: await listPosts(env, Number(url.searchParams.get('limit') || 10)) });
   if (path === '/posts' && method === 'POST') return addPostRoute(request, env, user);
   if (path.match(/^\/posts\/[^/]+$/) && method === 'PATCH') return updatePostRoute(request, env, user, path.split('/')[2]);
@@ -151,19 +202,24 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
   if (path.match(/^\/posts\/[^/]+\/comments$/) && method === 'POST') return addCommentRoute(request, env, user, path.split('/')[2]);
   if (path.match(/^\/comments\/[^/]+$/) && method === 'DELETE') return deleteCommentRoute(env, user, path.split('/')[2]);
   if (path.match(/^\/posts\/[^/]+\/toggle-like$/) && method === 'POST') return toggleLikeRoute(request, env, user, path.split('/')[2]);
+  return null;
+}
 
+async function routePushApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/push-subscriptions' && method === 'POST') return savePushSubscriptionRoute(request, env, user);
+  return null;
+}
 
+async function routeBackupApi(path: string, method: string, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/backup' && method === 'GET') {
     requireAdmin(user);
     return json(await backup(env));
   }
   if (path === '/backup/restore' && method === 'POST') {
     requireAdmin(user);
-    return bad('Restauração pelo app foi desativada nesta versão. Use tools/migrate load para restaurações auditáveis.', 501);
+    return bad('Restauracao pelo app foi desativada nesta versao. Use tools/migrate load para restauracoes auditaveis.', 501);
   }
-
-  return bad('Rota não encontrada.', 404);
+  return null;
 }
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}): Response {
