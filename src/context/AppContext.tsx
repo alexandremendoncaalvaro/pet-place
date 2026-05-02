@@ -149,7 +149,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const ensureKey = `${familyId}:${currentMonth}`;
     if (!ensuredPaymentsRef.current.has(ensureKey)) {
       ensuredPaymentsRef.current.add(ensureKey);
-      ensureCurrentMonthPayment(familyId, false).catch((error) => console.error('Failed to ensure current payment:', error));
+      ensureCurrentMonthPayment(familyId).catch((error) => console.error('Failed to ensure current payment:', error));
     }
 
     if (!pushRequestedRef.current.has(user.uid)) {

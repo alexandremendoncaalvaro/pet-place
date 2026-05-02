@@ -19,6 +19,7 @@ export function ResidentDashboard() {
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
 
+  const monthLabel = format(parseISO(`${currentMonth}-01`), 'MMMM', { locale: ptBR });
   const pixKeyToUse = appConfig?.pixKey || "Não configurada";
 
   const handleCopyPix = () => {
@@ -42,7 +43,34 @@ export function ResidentDashboard() {
   };
 
   if (!currentPayment) {
-    return <div className="p-6 text-gray-500 animate-pulse">Carregando status...</div>;
+    return (
+      <div className="pb-24">
+        <div className="m-4 p-5 rounded-3xl border border-amber-100 bg-amber-50 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Mensalidade de {monthLabel}</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Ainda não existe cobrança para este mês. Se a página acabou de abrir, aguarde alguns segundos ou recarregue.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 space-y-6">
+          {posts.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <ImagePlus size={40} className="mx-auto mb-3 opacity-20" />
+              <p>Nenhuma foto ainda. Seja o primeiro a postar!</p>
+            </div>
+          ) : (
+            posts.map(post => <PostItem key={post.id} post={post} />)
+          )}
+        </div>
+      </div>
+    );
   }
 
   const statusConfig = {
@@ -64,7 +92,7 @@ export function ResidentDashboard() {
               <StatusIcon size={18} className={statusConfig[currentPayment.status].color} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-gray-800">Mensalidade: Maio</h2>
+              <h2 className="text-sm font-semibold text-gray-800">Mensalidade: {monthLabel}</h2>
               <p className={`text-xs ${statusConfig[currentPayment.status].color}`}>{statusConfig[currentPayment.status].label}</p>
             </div>
           </div>

@@ -568,7 +568,15 @@ async function deleteUser(env: Env, userId: string): Promise<void> {
 
 async function getConfig(env: Env): Promise<any | null> {
   const row = await env.DB.prepare('SELECT * FROM settings WHERE id = ?').bind('config').first<any>();
-  if (!row) return null;
+  if (!row) {
+    return {
+      pixKey: '',
+      monthlyAmount: 30,
+      dueDateDay: 10,
+      paymentInstructions: '',
+      updatedAt: now(),
+    };
+  }
   return {
     pixKey: row.pix_key,
     monthlyAmount: row.monthly_amount,
