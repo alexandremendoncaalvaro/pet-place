@@ -6,9 +6,11 @@ import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile,
 import { Payment, UserProfile, AppEvent } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
+import { AdminFeedbackProvider, useAdminFeedback } from './AdminFeedback';
 
 const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
+  const { toast } = useAdminFeedback();
   
   if (u.email === 'peritto@gmail.com') {
     return (
@@ -24,7 +26,7 @@ const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteU
         <button onClick={() => setConfirming(false)} className="flex-1 text-[10px] bg-gray-100 text-gray-600 py-1.5 rounded-lg border border-gray-200">Cancelar</button>
         <button onClick={async () => {
           await deleteUserAndData(u.uid);
-          alert('Dados apagados.');
+          toast('Dados apagados.');
         }} className="flex-1 text-[10px] bg-red-500 text-white py-1.5 rounded-lg active:bg-red-600 shadow-sm">Sim, Excluir</button>
       </div>
     );
@@ -86,7 +88,16 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
 };
 
 export function AdminPanel() {
+  return (
+    <AdminFeedbackProvider>
+      <AdminPanelContent />
+    </AdminFeedbackProvider>
+  );
+}
+
+function AdminPanelContent() {
   const { allPayments, allUsers, appConfig } = useApp();
+  const { confirm, toast } = useAdminFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
@@ -224,11 +235,17 @@ export function AdminPanel() {
                   </div>
                 </div>
                 <button 
-                  onClick={() => {
+                  onClick={async () => {
                     const isAdmin = u.role === 'admin';
                     const nextRole = isAdmin ? 'resident' : 'admin';
-                    if (!confirm(`Alterar ${u.name} para ${nextRole === 'admin' ? 'Admin' : 'Pessoa'}?`)) return;
-                    updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
+                    const confirmed = await confirm({
+                      title: 'Alterar papel',
+                      message: `Alterar ${u.name} para ${nextRole === 'admin' ? 'Admin' : 'Pessoa'}?`,
+                      confirmLabel: 'Alterar',
+                    });
+                    if (!confirmed) return;
+                    await updateProfile(u.uid, { role: nextRole });
+                    toast('Papel atualizado.');
                   }}
                   className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
                   title="Alterar papel"
@@ -270,6 +287,7 @@ export function AdminPanel() {
 
 function SettingsForm() {
   const { appConfig, user } = useApp();
+  const { confirm, toast } = useAdminFeedback();
   const [pixKey, setPixKey] = useState(appConfig?.pixKey || '');
   const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() ?? '30');
   const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() ?? '10');
@@ -287,7 +305,7 @@ function SettingsForm() {
       paymentInstructions
     });
     setLoading(false);
-    alert('Configurações salvas!');
+    toast('Configurações salvas.');
   };
 
   return (
@@ -366,7 +384,7 @@ function SettingsForm() {
                 URL.revokeObjectURL(url);
               }
             } catch (err: any) {
-              alert('Erro ao exportar backup: ' + (err?.message || err));
+              toast('Erro ao exportar backup: ' + (err?.message || err), 'error');
             } finally {
               setLoading(false);
             }
@@ -387,12 +405,18 @@ function SettingsForm() {
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (!confirm("Isso irá restaurar todos os dados e imagens do arquivo ZIP no banco de dados. Deseja continuar?")) return;
+                const confirmed = await confirm({
+                  title: 'Restaurar backup',
+                  message: 'Isso irá restaurar todos os dados e imagens do arquivo ZIP no banco de dados. Deseja continuar?',
+                  confirmLabel: 'Restaurar',
+                  variant: 'danger',
+                });
+                if (!confirmed) return;
                 setLoading(true);
                 try {
                   await restoreZippedBackup(file);
                 } catch (err: any) {
-                  alert('Erro na restauração: ' + (err?.message || err));
+                  toast('Erro na restauração: ' + (err?.message || err), 'error');
                 } finally {
                   setLoading(false);
                   if (restoreFileRef.current) restoreFileRef.current.value = '';
@@ -416,6 +440,7 @@ function SettingsForm() {
 
 const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payment, userName }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const { toast } = useAdminFeedback();
 
   const handleAction = async (action: 'approve' | 'reject') => {
     try {
@@ -426,7 +451,7 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
         await rejectPayment(payment.id);
       }
     } catch (err) {
-      alert("Erro ao processar pagamento. Tente novamente.");
+      toast('Erro ao processar pagamento. Tente novamente.', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -473,14 +498,15 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useAdminFeedback();
 
   const handleUpload = async (file: File) => {
     try {
       setIsProcessing(true);
       await uploadProofAndSubmit(payment.id, file);
-      alert("Comprovante anexado! A cobrança foi movida para Avaliação.");
+      toast('Comprovante anexado. A cobrança foi movida para avaliação.');
     } catch (err) {
-      alert("Erro ao enviar comprovante.");
+      toast('Erro ao enviar comprovante.', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -510,7 +536,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
                    try {
                      await deletePayment(payment.id);
                    } catch (e: any) {
-                     alert(e.message || 'Erro');
+                     toast(e.message || 'Erro ao excluir cobrança.', 'error');
                    } finally {
                      setIsProcessing(false);
                      setConfirmingDelete(false);
@@ -553,6 +579,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
 
 function ExpenseForm() {
   const { user } = useApp();
+  const { toast } = useAdminFeedback();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -562,7 +589,7 @@ function ExpenseForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      alert("Por favor, anexe o comprovante.");
+      toast('Por favor, anexe o comprovante.', 'error');
       return;
     }
     setLoading(true);
@@ -575,7 +602,7 @@ function ExpenseForm() {
       createdAt: new Date().toISOString()
     }, file);
     setLoading(false);
-    alert('Despesa lançada com sucesso!');
+    toast('Despesa lançada com sucesso.');
     setTitle('');
     setAmount('');
     setFile(null);
@@ -646,6 +673,7 @@ function ExpenseForm() {
 
 function RateioForm() {
   const { allUsers } = useApp();
+  const { confirm, toast } = useAdminFeedback();
   const [desc, setDesc] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
@@ -673,13 +701,26 @@ function RateioForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!desc.trim()) return alert("Adicione uma descrição do rateio.");
+    if (!desc.trim()) {
+      toast('Adicione uma descrição do rateio.', 'error');
+      return;
+    }
     const amt = parseFloat(amountStr);
-    if (!amt || amt <= 0) return alert("Adicione um valor válido para dividir.");
-    if (selectedUsers.size === 0) return alert("Selecione pelo menos uma pessoa.");
+    if (!amt || amt <= 0) {
+      toast('Adicione um valor válido para dividir.', 'error');
+      return;
+    }
+    if (selectedUsers.size === 0) {
+      toast('Selecione pelo menos uma pessoa.', 'error');
+      return;
+    }
     
     const valuePerPerson = amt / selectedUsers.size;
-    const isConfirmed = confirm(`O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas.\nCada pessoa pagará: R$ ${valuePerPerson.toFixed(2)}.\nConfirma?`);
+    const isConfirmed = await confirm({
+      title: 'Gerar rateio',
+      message: `O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas. Cada pessoa pagará R$ ${valuePerPerson.toFixed(2)}.`,
+      confirmLabel: 'Gerar',
+    });
     if (!isConfirmed) return;
 
     setLoading(true);
@@ -707,12 +748,12 @@ function RateioForm() {
 
       await createCharges(charges);
       
-      alert('Rateio gerado com sucesso! As famílias verão a cobrança agregada.');
+      toast('Rateio gerado com sucesso. As famílias verão a cobrança agregada.');
       setDesc('');
       setAmountStr('');
       setSelectedUsers(new Set());
     } catch(e: any) {
-      alert('Erro ao gerar rateio: ' + (e.message || e));
+      toast('Erro ao gerar rateio: ' + (e.message || e), 'error');
     } finally {
       setLoading(false);
     }
@@ -786,6 +827,7 @@ function RateioForm() {
 
 function CommsForm() {
   const { user } = useApp();
+  const { toast } = useAdminFeedback();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'event' | 'announcement'>('announcement');
   const [title, setTitle] = useState('');
@@ -816,7 +858,7 @@ function CommsForm() {
       // O Worker unificado cria a notificação e dispara Web Push quando notifyNow=true.
       void eventId;
 
-      alert('Publicado!');
+      toast('Publicado.');
       setTitle('');
       setDesc('');
       setDate('');
@@ -825,7 +867,7 @@ function CommsForm() {
       setNotify24h(false);
       setNotify1h(false);
     } catch(err) {
-      alert('Erro ao publicar.');
+      toast('Erro ao publicar.', 'error');
     } finally {
       setLoading(false);
     }
@@ -915,6 +957,7 @@ function CommsForm() {
 
 function CommsManager() {
   const { events, allUsers } = useApp();
+  const { confirm } = useAdminFeedback();
   
   return (
     <div className="space-y-6">
@@ -939,7 +982,7 @@ function CommsManager() {
                      <h4 className="text-sm font-semibold text-gray-800 mt-1">{evt.title}</h4>
                    </div>
                    <button className="text-gray-400 hover:text-red-500 transition-colors p-1" onClick={async () => {
-                     if (confirm('Excluir este item?')) {
+                     if (await confirm({ title: 'Excluir item', message: 'Excluir este item do mural?', confirmLabel: 'Excluir', variant: 'danger' })) {
                        await deleteEvent(evt.id);
                      }
                    }}>
