@@ -21,6 +21,7 @@ import {
   setMockRole,
   requestPushToken
 } from '../services/api';
+import { connectRealtime } from '../services/realtime';
 
 interface AppState {
   user: UserProfile | null;
@@ -166,6 +167,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!backendReady || !user) return;
     return subscribeToAllPosts(postLimit, setPosts);
   }, [backendReady, user?.uid, postLimit]);
+
+  useEffect(() => {
+    if (!backendReady || !user) return;
+    return connectRealtime();
+  }, [backendReady, user?.uid]);
 
   const handleLogin = async () => {
     try { await loginWithGoogle(); } catch(e) { console.error(e); }

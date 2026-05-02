@@ -42,6 +42,15 @@ describe('project architecture guardrails', () => {
     expect(wrangler).toContain('new_sqlite_classes = ["RealtimeHub"]');
   });
 
+  it('keeps data subscriptions topic-scoped instead of aggressive polling', () => {
+    const apiService = read('src/services/api.ts');
+    const subscriptions = read('src/services/subscriptions.ts');
+
+    expect(apiService).not.toContain(', 30000');
+    expect(subscriptions).toContain('DEFAULT_REFRESH_INTERVAL_MS = 120000');
+    expect(subscriptions).toContain('matchesTopic');
+  });
+
   it('keeps legacy Firebase runtime files out of the public repo root', () => {
     const legacyFiles = [
       'firebase.json',
