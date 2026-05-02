@@ -1,0 +1,13 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "caixinha-notifications"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Secrets (configure via: npx wrangler secret put <NAME>)
+# - FIREBASE_PROJECT_ID
+# - FIREBASE_CLIENT_EMAIL
+# - FIREBASE_PRIVATE_KEY
+# - FIRESTORE_DATABASE_ID
