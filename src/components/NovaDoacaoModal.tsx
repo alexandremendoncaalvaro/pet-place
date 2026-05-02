@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, Heart, UploadCloud } from 'lucide-react';
 import { submitDonation } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
+import { Button, FieldGroup, FieldLabel, IconButton, ModalSurface, TextInput } from './ui';
 
 export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
   const { user } = useApp();
@@ -25,7 +26,7 @@ export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
       toast('Anexe o comprovante.', 'error');
       return;
     }
-    
+
     setLoading(true);
     try {
       await submitDonation(amount, file, user.familyId || user.uid);
@@ -41,49 +42,49 @@ export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[100] flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <form onSubmit={handleSubmit} className="relative bg-white w-full sm:w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-auto animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200">
+      <ModalSurface as="form" onSubmit={handleSubmit} className="flex h-[85vh] flex-col p-0 sm:h-auto animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200">
         <div className="flex items-center justify-between p-6 pb-2">
-          <h2 className="text-xl font-bold flex items-center gap-2"><Heart className="text-red-500 fill-red-500" /> Fazer uma Doação</h2>
-          <button type="button" onClick={onClose} className="p-2 bg-gray-100 rounded-full text-gray-500 active:scale-90 transition-transform">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-ink-900"><Heart className="text-danger-600 fill-danger-600" /> Fazer uma Doação</h2>
+          <IconButton type="button" onClick={onClose} className="bg-ink-100 text-ink-500">
             <X size={20} />
-          </button>
+          </IconButton>
         </div>
 
         <div className="p-6 space-y-6 overflow-y-auto">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-700">
             Você pode doar valores adicionais para ajudar em melhorias, festas ou fundo de reserva comunitário. Muito obrigado!
           </p>
-          
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Valor da Doação (R$)</label>
-            <input 
+
+          <FieldGroup>
+            <FieldLabel>Valor da Doação (R$)</FieldLabel>
+            <TextInput
               type="number"
               step="0.01"
               required
               value={amountStr}
               onChange={e => setAmountStr(e.target.value)}
               placeholder="Ex: 50.00"
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-xl font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="p-4 text-xl"
             />
-          </div>
+          </FieldGroup>
 
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Comprovante PIX</label>
+          <FieldGroup>
+            <FieldLabel>Comprovante PIX</FieldLabel>
             {file ? (
-              <div className="relative border border-gray-200 rounded-2xl overflow-hidden aspect-video bg-gray-50 flex items-center justify-center">
+              <div className="relative border border-ink-200 rounded-2xl overflow-hidden aspect-video bg-ink-50 flex items-center justify-center">
                 <ImageWithSkeleton src={URL.createObjectURL(file)} alt="Comprovante" className="max-w-full max-h-full object-contain" containerClassName="w-full h-full flex justify-center items-center" />
-                <button 
+                <IconButton
                   type="button"
-                  onClick={() => setFile(null)} 
+                  onClick={() => setFile(null)}
                   className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 backdrop-blur"
                 >
                   <X size={16} />
-                </button>
+                </IconButton>
               </div>
             ) : (
-              <div 
+              <div
                 onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-gray-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-colors"
+                className="border-2 border-dashed border-ink-200 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-ink-500 hover:text-brand-600 hover:border-brand-500 hover:bg-brand-50 cursor-pointer transition-colors"
               >
                 <UploadCloud size={32} />
                 <span className="text-sm font-medium">Toque para anexar comprovante</span>
@@ -92,19 +93,20 @@ export function NovaDoacaoModal({ onClose }: { onClose: () => void }) {
             <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={e => {
               if (e.target.files?.[0]) setFile(e.target.files[0]);
             }} />
-          </div>
+          </FieldGroup>
         </div>
 
-        <div className="p-4 border-t border-gray-100 pb-safe">
-          <button 
-            type="submit" 
+        <div className="p-4 border-t border-ink-100 pb-safe">
+          <Button
+            type="submit"
             disabled={loading}
-            className="w-full bg-gray-900 active:bg-black text-white px-4 py-4 rounded-full font-semibold transition-all shadow-md disabled:opacity-50 flex items-center justify-center flex-shrink-0"
+            className="w-full rounded-full flex-shrink-0"
+            size="lg"
           >
             {loading ? 'Enviando...' : 'Confirmar e Enviar'}
-          </button>
+          </Button>
         </div>
-      </form>
+      </ModalSurface>
     </div>
   );
 }

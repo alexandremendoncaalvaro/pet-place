@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
 import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 import { useFeedback } from './Feedback';
+import { Badge, Button, Card, EmptyState, FieldGroup, FieldLabel, IconButton, Page, SectionTitle, TextInput } from './ui';
 
 export function ProfileView() {
   const { user, myPets, publicProfiles } = useApp();
@@ -122,10 +123,10 @@ export function ProfileView() {
   };
 
   return (
-    <div className="p-6 max-w-lg mx-auto pb-24 space-y-6">
-      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col items-center text-center">
+    <Page className="space-y-6">
+      <Card className="p-6 flex flex-col items-center text-center">
         <div className="relative mb-4 group cursor-pointer" onClick={() => userFileInputRef.current?.click()}>
-          <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-bold uppercase overflow-hidden border-2 border-white shadow-sm ring-2 ring-gray-100">
+          <div className="w-20 h-20 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center text-2xl font-bold uppercase overflow-hidden border-2 border-white shadow-sm ring-2 ring-ink-100">
             {userPhoto ? (
               <ImageWithSkeleton src={URL.createObjectURL(userPhoto)} alt="preview" className="w-full h-full object-cover" containerClassName="w-full h-full" />
             ) : user?.photoUrl ? (
@@ -139,55 +140,54 @@ export function ProfileView() {
           </div>
         </div>
         <input type="file" accept="image/*" ref={userFileInputRef} onChange={e => setUserPhoto(e.target.files?.[0] || null)} className="hidden" />
-        <h2 className="text-xl font-semibold text-gray-800">{user?.name}</h2>
+        <h2 className="text-xl font-semibold text-ink-900">{user?.name}</h2>
         {user?.role === 'admin' && (
-          <p className="text-gray-500 text-sm capitalize">Administrador</p>
+          <Badge tone="brand" className="mt-1">Administrador</Badge>
         )}
-        <p className="text-gray-400 text-xs mt-1">{user?.email}</p>
-      </div>
+        <p className="text-ink-400 text-xs mt-1">{user?.email}</p>
+      </Card>
 
-      <form onSubmit={handleSave} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
-        <h3 className="font-semibold text-gray-800 text-lg mb-2">Editar Dados</h3>
-        <div>
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 flex items-center">
+      <Card as="form" onSubmit={handleSave} className="p-6 space-y-4">
+        <SectionTitle className="mb-2">Editar Dados</SectionTitle>
+        <FieldGroup>
+          <FieldLabel className="flex items-center">
             <User size={14} className="mr-1" /> Nome de Exibição
-          </label>
-          <input 
+          </FieldLabel>
+          <TextInput
             required
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-700"
           />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 flex items-center">
+        </FieldGroup>
+        <FieldGroup>
+          <FieldLabel className="flex items-center">
             <Phone size={14} className="mr-1" /> Celular (WhatsApp)
-          </label>
-          <input 
+          </FieldLabel>
+          <TextInput
             value={phone}
             onChange={e => setPhone(formatPhoneBR(e.target.value))}
             placeholder={PHONE_BR_PLACEHOLDER}
             inputMode="tel"
             autoComplete="tel-national"
             maxLength={15}
-            className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-700"
           />
-        </div>
-        <button 
+        </FieldGroup>
+        <Button
           disabled={loading}
           type="submit"
-          className="w-full mt-4 bg-gray-900 active:bg-black text-white py-4 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
+          className="w-full mt-4"
+          size="lg"
         >
           {loading ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} className="mr-2" /> Salvar Perfil</>}
-        </button>
-      </form>
+        </Button>
+      </Card>
 
       {/* Family Section */}
-      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+      <Card className="p-6 space-y-4">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-gray-800 text-lg">Grupo Familiar</h3>
+          <h3 className="font-semibold text-ink-900 text-lg">Grupo Familiar</h3>
         </div>
-        
+
         {(() => {
           const myFamilyMembers = publicProfiles.filter(p => (p.familyId || p.uid) === (user?.familyId || user?.uid));
           const hasFamily = myFamilyMembers.length > 1;
@@ -196,52 +196,55 @@ export function ProfileView() {
           return (
             <div className="flex flex-col gap-4">
               {hasFamily && (
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-start gap-2 w-full">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                <div className="bg-brand-50 p-4 rounded-xl border border-brand-100 flex flex-col items-start gap-2 w-full">
+                  <h4 className="text-sm font-semibold text-brand-700 mb-1">
                     Membros do Grupo
                   </h4>
                   <div className="w-full flex flex-col gap-2 mb-2">
                     {myFamilyMembers.map(m => (
-                      <div key={m.uid} className="flex items-center gap-3 bg-white/60 p-2.5 rounded-xl border border-blue-100/50">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div key={m.uid} className="flex items-center gap-3 bg-white/60 p-2.5 rounded-xl border border-brand-100/50">
+                        <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-500 flex items-center justify-center overflow-hidden flex-shrink-0">
                           {m.photoUrl ? <img src={m.photoUrl} alt={m.name} className="w-full h-full object-cover" /> : <User size={16} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{m.name} {m.uid === user?.uid && '(Você)'}</p>
+                          <p className="text-sm font-medium text-ink-900 truncate">{m.name} {m.uid === user?.uid && '(Você)'}</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-blue-800 bg-blue-100/50 p-3 rounded-lg border border-blue-200/50 w-full leading-relaxed">
+                  <p className="text-xs text-brand-700 bg-brand-100/50 p-3 rounded-lg border border-brand-100 w-full leading-relaxed">
                     Membros compartilham pagamentos, notificações e pets. O valor de mensalidades e rateios é gerado unicamente por <b>grupo</b>.
                   </p>
-                  
+
                   {!isFamilyOwner && (
                     <div className="w-full mt-2">
                       {confirmLeaveFamily ? (
                         <div className="flex gap-2 w-full">
-                          <button 
+                          <Button
                             disabled={familyLoading}
-                            type="button" 
+                            type="button"
                             onClick={() => setConfirmLeaveFamily(false)}
-                            className="flex-1 text-sm bg-white text-gray-600 font-medium border border-gray-200 py-2 rounded-xl active:scale-95 disabled:opacity-50"
-                          >Cancelar</button>
-                          <button 
+                            variant="secondary"
+                            className="flex-1 bg-white"
+                          >Cancelar</Button>
+                          <Button
                             disabled={familyLoading}
-                            type="button" 
+                            type="button"
                             onClick={handleLeaveFamily}
-                            className="flex-1 text-sm bg-red-50 text-red-600 font-medium border border-red-200 py-2 rounded-xl active:scale-95 disabled:opacity-50"
-                          >Sim, Sair</button>
+                            variant="danger"
+                            className="flex-1"
+                          >Sim, Sair</Button>
                         </div>
                       ) : (
-                        <button 
+                        <Button
                           disabled={familyLoading}
-                          type="button" 
+                          type="button"
                           onClick={() => setConfirmLeaveFamily(true)}
-                          className="text-sm bg-white text-red-600 font-medium border border-red-200 px-4 py-2 rounded-xl w-full active:scale-95 disabled:opacity-50"
+                          variant="danger"
+                          className="w-full bg-white border border-danger-100"
                         >
                           Sair do Grupo
-                        </button>
+                        </Button>
                       )}
                     </div>
                   )}
@@ -251,47 +254,50 @@ export function ProfileView() {
               {isFamilyOwner && (
                 <div>
                   {!hasFamily && (
-                    <p className="text-sm text-gray-500 mb-4 leading-relaxed">
+                    <p className="text-sm text-ink-500 mb-4 leading-relaxed">
                       Ao vincular sua conta à de outra pessoa, vocês compartilharão pagamentos e pets.
                     </p>
                   )}
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
-                    <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Código de Convite</span>
+                  <div className="bg-ink-50 p-4 rounded-xl border border-ink-200 mb-4">
+                    <span className="text-xs text-ink-500 uppercase tracking-widest block mb-1">Código de Convite</span>
                     <div className="flex items-center justify-between">
-                      <code className="font-mono text-sm text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded select-all">{user?.uid?.substring(0, 8)}...</code>
-                      <button 
+                      <code className="font-mono text-sm text-brand-600 font-bold bg-brand-50 px-2 py-1 rounded select-all">{user?.uid?.substring(0, 8)}...</code>
+                      <Button
                         type="button"
                         onClick={() => { navigator.clipboard.writeText(user?.uid || ''); toast('Código copiado.'); }}
-                        className="text-xs text-blue-600 font-bold px-2 py-1 bg-blue-100 rounded-md active:scale-95"
+                        variant="ghost"
+                        size="sm"
+                        className="text-brand-600"
                       >
-                        COPIAR
-                      </button>
+                        Copiar
+                      </Button>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-2">Envie seu código para outros moradores se juntarem.</p>
+                    <p className="text-[10px] text-ink-400 mt-2">Envie seu código para outras pessoas se juntarem.</p>
                   </div>
 
                   {!showFamilyInput && !hasFamily && (
-                    <button 
-                      type="button" 
-                      onClick={() => setShowFamilyInput(true)} 
-                      className="w-full text-blue-600 bg-blue-50 hover:bg-blue-100 py-3 rounded-xl font-medium active:scale-95 transition-all"
+                    <Button
+                      type="button"
+                      onClick={() => setShowFamilyInput(true)}
+                      variant="ghost"
+                      className="w-full text-brand-600 bg-brand-50"
                     >
                       Já tem um código? Vincule-se
-                    </button>
+                    </Button>
                   )}
                   {showFamilyInput && !hasFamily && (
-                    <form onSubmit={handleJoinFamily} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                      <label className="text-xs font-semibold text-gray-500 uppercase">Código da Família</label>
-                      <input 
-                        required 
-                        value={familyCode} 
-                        onChange={e => setFamilyCode(e.target.value)} 
+                    <form onSubmit={handleJoinFamily} className="space-y-3 p-4 bg-ink-50 rounded-xl border border-ink-200">
+                      <FieldLabel>Código da Família</FieldLabel>
+                      <TextInput
+                        required
+                        value={familyCode}
+                        onChange={e => setFamilyCode(e.target.value)}
                         placeholder="Cole o código do responsável aqui..."
-                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm" 
+                        className="bg-white py-2 text-sm"
                       />
                       <div className="flex gap-2 pt-1">
-                        <button type="button" onClick={() => setShowFamilyInput(false)} className="flex-[0.5] text-sm bg-white border border-gray-200 text-gray-600 py-2 rounded-xl">Cancelar</button>
-                        <button disabled={familyLoading} type="submit" className="flex-1 text-sm bg-blue-600 active:bg-blue-700 text-white py-2 rounded-xl disabled:opacity-50 font-medium">Vincular</button>
+                        <Button type="button" onClick={() => setShowFamilyInput(false)} variant="secondary" className="flex-[0.5] bg-white">Cancelar</Button>
+                        <Button disabled={familyLoading} type="submit" className="flex-1">Vincular</Button>
                       </div>
                     </form>
                   )}
@@ -300,50 +306,50 @@ export function ProfileView() {
             </div>
           );
         })()}
-      </div>
+      </Card>
 
       {/* Pets Section */}
-      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+      <Card className="p-6 space-y-4">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-gray-800 text-lg">Meus Pets</h3>
+          <h3 className="font-semibold text-ink-900 text-lg">Meus Pets</h3>
           {!showPetForm && (
-            <button onClick={() => setShowPetForm(true)} className="text-blue-600 bg-blue-50 p-2 rounded-xl active:scale-95 transition-transform">
+            <IconButton onClick={() => setShowPetForm(true)} className="text-brand-600 bg-brand-50">
               <Plus size={18} />
-            </button>
+            </IconButton>
           )}
         </div>
 
         {myPets.length === 0 && !showPetForm && (
-          <p className="text-gray-500 text-sm italic">Nenhum pet cadastrado.</p>
+          <EmptyState className="p-4">Nenhum pet cadastrado.</EmptyState>
         )}
 
         <div className="space-y-3">
           {myPets.map(p => (
-            <div key={p.id} className="flex items-center gap-4 bg-gray-50 p-3 rounded-2xl border border-gray-100">
-              <div className="w-12 h-12 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex justify-center items-center">
+            <div key={p.id} className="flex items-center gap-4 bg-ink-50 p-3 rounded-2xl border border-ink-100">
+              <div className="w-12 h-12 bg-ink-200 rounded-full overflow-hidden flex-shrink-0 flex justify-center items-center">
                 {p.photoUrl ? (
                   <ImageWithSkeleton src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" containerClassName="w-full h-full" />
                 ) : (
-                  <span className="text-xl text-gray-400 text-center w-full">🐾</span>
+                  <span className="text-xl text-ink-400 text-center w-full">🐾</span>
                 )}
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-gray-800">{p.name}</p>
-                <p className="text-xs text-gray-500">{p.breed || 'Sem raça'}</p>
+                <p className="font-semibold text-ink-900">{p.name}</p>
+                <p className="text-xs text-ink-500">{p.breed || 'Sem raça'}</p>
               </div>
               {confirmDeletePetId === p.id ? (
                 <div className="flex gap-1">
-                  <button type="button" onClick={() => setConfirmDeletePetId(null)} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg">Cancelar</button>
-                  <button type="button" onClick={() => handleDeletePet(p.id, p.name)} className="px-2 py-1 text-xs bg-red-500 text-white rounded-lg">Excluir</button>
+                  <Button type="button" onClick={() => setConfirmDeletePetId(null)} variant="secondary" size="sm">Cancelar</Button>
+                  <Button type="button" onClick={() => handleDeletePet(p.id, p.name)} variant="danger" size="sm">Excluir</Button>
                 </div>
               ) : (
                 <>
-                  <button type="button" onClick={() => startEditPet(p)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
+                  <IconButton type="button" onClick={() => startEditPet(p)} className="text-brand-500 hover:bg-brand-50">
                     <Edit2 size={18} />
-                  </button>
-                  <button type="button" onClick={() => setConfirmDeletePetId(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                  </IconButton>
+                  <IconButton type="button" onClick={() => setConfirmDeletePetId(p.id)} className="text-danger-600 hover:bg-danger-50">
                     <Trash2 size={18} />
-                  </button>
+                  </IconButton>
                 </>
               )}
             </div>
@@ -351,35 +357,35 @@ export function ProfileView() {
         </div>
 
         {showPetForm && (
-          <form onSubmit={handleSavePet} className="mt-4 pt-4 border-t border-gray-100 space-y-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Nome do Pet</label>
-              <input required value={petName} onChange={e => setPetName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Raça</label>
-              <input value={petBreed} onChange={e => setPetBreed(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Foto (opcional)</label>
+          <form onSubmit={handleSavePet} className="mt-4 pt-4 border-t border-ink-100 space-y-3">
+            <FieldGroup>
+              <FieldLabel>Nome do Pet</FieldLabel>
+              <TextInput required value={petName} onChange={e => setPetName(e.target.value)} className="py-2 text-sm" />
+            </FieldGroup>
+            <FieldGroup>
+              <FieldLabel>Raça</FieldLabel>
+              <TextInput value={petBreed} onChange={e => setPetBreed(e.target.value)} className="py-2 text-sm" />
+            </FieldGroup>
+            <FieldGroup>
+              <FieldLabel>Foto (opcional)</FieldLabel>
               <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setPetFile(e.target.files?.[0] || null)} className="hidden" />
               <div className="flex items-center gap-3">
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-gray-100 text-gray-700 px-3 py-2 border border-gray-200 rounded-xl text-sm flex items-center shadow-sm">
+                <Button type="button" onClick={() => fileInputRef.current?.click()} variant="secondary">
                   <Camera size={16} className="mr-2" /> Escolher Foto
-                </button>
-                <span className="text-xs text-gray-500 truncate max-w-[150px]">{petFile?.name || 'Nenhuma selecionada'}</span>
+                </Button>
+                <span className="text-xs text-ink-500 truncate max-w-[150px]">{petFile?.name || 'Nenhuma selecionada'}</span>
               </div>
-            </div>
+            </FieldGroup>
             <div className="flex gap-2 pt-2">
-              <button type="button" onClick={() => { setShowPetForm(false); setEditingPetId(null); }} className="flex-1 text-sm bg-gray-100 text-gray-600 py-2.5 rounded-xl font-medium">Cancelar</button>
-              <button disabled={petLoading} type="submit" className="flex-1 text-sm bg-blue-600 text-white py-2.5 rounded-xl font-medium flex items-center justify-center disabled:opacity-50">
+              <Button type="button" onClick={() => { setShowPetForm(false); setEditingPetId(null); }} variant="secondary" className="flex-1">Cancelar</Button>
+              <Button disabled={petLoading} type="submit" className="flex-1">
                 {petLoading ? <Loader2 size={16} className="animate-spin" /> : (editingPetId ? 'Salvar Pet' : 'Adicionar Pet')}
-              </button>
+              </Button>
             </div>
           </form>
         )}
-      </div>
+      </Card>
 
-    </div>
+    </Page>
   );
 }

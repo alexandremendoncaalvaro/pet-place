@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, User, PawPrint, X, Users, Image as ImageIcon, Info } from 'lucide-react';
-import { UserProfile, Pet } from '../lib/types';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { PostItem } from './PostItem';
+import { Info, PawPrint, Search, User } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { AboutModal } from './AboutModal';
+import { Badge, Button, Card, EmptyState, Page, SectionTitle, TextInput } from './ui';
 
 export function DirectoryView() {
   const { publicProfiles, allPets, setViewProfileId, setViewPetId } = useApp();
@@ -14,11 +11,11 @@ export function DirectoryView() {
   const [filter, setFilter] = useState<'all' | 'people' | 'pets'>('all');
   const [showAbout, setShowAbout] = useState(false);
 
-  const filteredProfiles = publicProfiles.filter(p => 
+  const filteredProfiles = publicProfiles.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredPets = allPets.filter(p => 
+  const filteredPets = allPets.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.breed && p.breed.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -37,78 +34,86 @@ export function DirectoryView() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-[calc(100vh-140px)]">
-      
+    <Page className="min-h-[calc(100vh-140px)]">
+
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
 
       {/* Banner Sobre */}
-      <div 
+      <Card
+        role="button"
+        tabIndex={0}
         onClick={() => setShowAbout(true)}
-        className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-3xl mb-6 shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-4 cursor-pointer"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') setShowAbout(true);
+        }}
+        className="bg-brand-600 text-white p-4 mb-6 shadow-md shadow-brand-600/20 active:scale-95 transition-transform flex items-center gap-4 cursor-pointer border-brand-600"
       >
         <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
           <Info size={24} className="text-white" />
         </div>
         <div className="flex-1">
           <h3 className="font-bold text-sm tracking-wide">Sobre o Pet Place</h3>
-          <p className="text-xs text-blue-100 mt-1 leading-tight">Como surgiu nosso projeto, segurança e regras da nossa comunidade.</p>
+          <p className="text-xs text-brand-50 mt-1 leading-tight">Como surgiu nosso projeto, segurança e regras da nossa comunidade.</p>
         </div>
-      </div>
+      </Card>
 
       <div className="mb-6 flex justify-between items-end">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">Comunidade</h2>
-          <p className="text-sm text-gray-500">Quem participa do espaço</p>
+          <h2 className="text-xl font-bold text-ink-900">Comunidade</h2>
+          <p className="text-sm text-ink-500">Quem participa do espaço</p>
         </div>
       </div>
 
-      <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 mb-6 flex items-center">
-        <Search size={20} className="text-gray-400 ml-2" />
-        <input 
-          type="text" 
-          placeholder="Buscar..." 
+      <div className="relative mb-6">
+        <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400" />
+        <TextInput
+          type="text"
+          placeholder="Buscar..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-transparent border-none focus:ring-0 text-sm ml-2 outline-none p-1"
+          className="pl-11"
         />
       </div>
 
       <div className="flex gap-2 mb-6">
-        <button 
+        <Button
           onClick={() => setFilter('all')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${filter === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'bg-white text-gray-600 border border-gray-200'}`}
+          variant={filter === 'all' ? 'primary' : 'secondary'}
+          className="flex-1"
         >
           Todos
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setFilter('people')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${filter === 'people' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'bg-white text-gray-600 border border-gray-200'}`}
+          variant={filter === 'people' ? 'primary' : 'secondary'}
+          className="flex-1"
         >
           Pessoas
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setFilter('pets')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${filter === 'pets' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'bg-white text-gray-600 border border-gray-200'}`}
+          variant={filter === 'pets' ? 'primary' : 'secondary'}
+          className="flex-1"
         >
           Pets
-        </button>
+        </Button>
       </div>
 
       {filter !== 'pets' && (
         <div className="mb-8">
-          {filter === 'all' && <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">Pessoas</h3>}
+          {filter === 'all' && <SectionTitle className="mb-4">Pessoas</SectionTitle>}
           {filteredProfiles.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredProfiles.map(profile => {
                 const familyPets = getFamilyPets(profile.uid);
                 return (
-                <div 
-                  key={profile.uid} 
-                  className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:border-blue-200 transition-colors"
+                <Card
+                  key={profile.uid}
+                  className="p-4 flex items-center gap-4 cursor-pointer hover:border-brand-100 transition-colors"
                   onClick={() => setViewProfileId(profile.uid)}
                 >
-                  <div 
-                    className={`w-16 h-16 rounded-2xl overflow-hidden bg-blue-50 flex-shrink-0 flex items-center justify-center text-blue-300 ${profile.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
+                  <div
+                    className={`w-16 h-16 rounded-2xl overflow-hidden bg-brand-50 flex-shrink-0 flex items-center justify-center text-brand-500 ${profile.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                   >
                     {profile.photoUrl ? (
                       <ImageWithSkeleton src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" containerClassName="w-full h-full" />
@@ -117,45 +122,45 @@ export function DirectoryView() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-gray-800 truncate">{profile.name}</h4>
+                    <h4 className="font-semibold text-ink-900 truncate">{profile.name}</h4>
                     {profile.role === 'admin' && (
-                      <p className="text-xs text-blue-600 font-medium capitalize mt-1 border border-blue-100 bg-blue-50 px-2 py-0.5 rounded-md w-max">{profile.role}</p>
+                      <Badge tone="brand" className="rounded-md mt-1 px-2 py-0.5 capitalize">{profile.role}</Badge>
                     )}
                     {familyPets.length > 0 && (
                       <div className="mt-2 flex items-center gap-2">
-                        <div className="text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max border border-gray-200">
-                          <PawPrint size={12} className="mr-1.5 text-blue-500" />
+                        <div className="text-xs text-ink-500 flex items-center bg-ink-50 rounded-lg px-2 py-1 w-max border border-ink-200">
+                          <PawPrint size={12} className="mr-1.5 text-brand-500" />
                           <span className="truncate max-w-[120px] sm:max-w-[150px]">{familyPets.map(p => p.name).join(', ')}</span>
                         </div>
                       </div>
                     )}
                   </div>
-                </div>
+                </Card>
               )})}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-sm bg-white rounded-3xl border border-dashed border-gray-200">
+            <EmptyState>
               Nenhuma pessoa encontrada
-            </div>
+            </EmptyState>
           )}
         </div>
       )}
 
       {filter !== 'people' && (
         <div className="mb-8">
-          {filter === 'all' && <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">Pets</h3>}
+          {filter === 'all' && <SectionTitle className="mb-4">Pets</SectionTitle>}
           {filteredPets.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredPets.map(pet => {
                 const responsiblePeople = getFamilyMembers(pet.ownerId);
                 return (
-                  <div 
-                    key={pet.id} 
-                    className="bg-white p-4 rounded-3xl shadow-sm border border-orange-100 flex items-center gap-4 cursor-pointer hover:border-orange-300 transition-colors"
+                  <Card
+                    key={pet.id}
+                    className="p-4 flex items-center gap-4 cursor-pointer hover:border-warning-100 transition-colors"
                     onClick={() => setViewPetId(pet.id)}
                   >
-                    <div 
-                      className={`w-16 h-16 rounded-full overflow-hidden bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-300 border-2 border-orange-100 p-0.5 ${pet.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
+                    <div
+                      className={`w-16 h-16 rounded-full overflow-hidden bg-warning-50 flex-shrink-0 flex items-center justify-center text-warning-600 border-2 border-warning-100 p-0.5 ${pet.photoUrl ? 'hover:opacity-90 active:scale-95 transition-all' : ''}`}
                     >
                       {pet.photoUrl ? (
                         <ImageWithSkeleton src={pet.photoUrl} alt={pet.name} className="w-full h-full object-cover rounded-full" containerClassName="w-full h-full rounded-full" />
@@ -164,26 +169,26 @@ export function DirectoryView() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-gray-800 truncate">{pet.name}</h4>
-                      {pet.breed && <p className="text-xs text-orange-600 font-medium mt-1">{pet.breed}</p>}
+                      <h4 className="font-semibold text-ink-900 truncate">{pet.name}</h4>
+                      {pet.breed && <p className="text-xs text-warning-600 font-medium mt-1">{pet.breed}</p>}
                       {responsiblePeople.length > 0 && (
-                        <div className="mt-2 text-xs text-gray-500 flex items-center bg-gray-50 rounded-lg px-2 py-1 w-max border border-gray-200">
-                          <User size={12} className="mr-1.5 text-blue-500" />
+                        <div className="mt-2 text-xs text-ink-500 flex items-center bg-ink-50 rounded-lg px-2 py-1 w-max border border-ink-200">
+                          <User size={12} className="mr-1.5 text-brand-500" />
                           <span className="truncate max-w-[120px] sm:max-w-[150px]">{responsiblePeople.map(p => p.name).join(', ')}</span>
                         </div>
                       )}
                     </div>
-                  </div>
+                  </Card>
                 )
               })}
             </div>
           ) : (
-             <div className="text-center py-8 text-gray-400 text-sm bg-white rounded-3xl border border-dashed border-gray-200">
+             <EmptyState>
                Nenhum pet encontrado
-             </div>
+             </EmptyState>
           )}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

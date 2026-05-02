@@ -60,6 +60,10 @@ Arquivo: `src/components/ui.tsx`.
 - `FieldLabel`: rótulos de formulário.
 - `TextInput`: campo de texto padrão.
 - `EmptyState`: estado vazio consistente.
+- `Page`: largura e respiro padrão das telas mobile.
+- `SectionTitle`: título de seção com ícone e ação opcional.
+- `ModalSurface`: superfície padrão para bottom sheets e diálogos.
+- `FieldGroup`: agrupamento simples de campo e rótulo.
 
 ## Uso Recomendado
 
@@ -83,8 +87,14 @@ import { Button, Card, FieldLabel, TextInput } from './components/ui';
 - A ação primária é única e óbvia?
 - Estados vazios explicam o que aconteceu sem parecer erro?
 
+## Status da Migração Visual
+
+- Telas principais (`Início`, `Comunidade`, `Mural`, `Extrato` e `Perfil`) usam tokens e primitives.
+- Modais de publicação, doação, sobre, imagem em tela cheia e detalhes usam a mesma superfície visual.
+- `AdminPanel.tsx` já usa `Page`, `Card`, `Button`, `Badge`, `EmptyState` e inputs padronizados nas áreas principais, mas continua sendo o maior candidato a separação por domínio.
+
 ## Backlog Visual
 
-- Migrar gradualmente `AdminPanel.tsx`, `ProfileView.tsx` e cards financeiros para primitives.
-- Criar componentes compostos para `PageHeader`, `SectionTitle`, `StatusPill` e `FileDropzone` quando houver mais de dois usos claros.
+- Quebrar `AdminPanel.tsx` em módulos menores (`Approvals`, `People`, `Settings`, `Comms`) antes de adicionar novas regras administrativas.
+- Criar componentes compostos para `StatusPill` e `FileDropzone` quando houver mais de dois usos claros.
 - Adicionar screenshots de referência depois da validação manual do RC.

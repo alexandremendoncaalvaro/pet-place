@@ -45,11 +45,12 @@ export function IconButton({ className, ...props }: ButtonProps) {
 
 export type CardProps = React.HTMLAttributes<HTMLDivElement> & {
   tone?: 'default' | 'muted' | 'brand';
+  as?: React.ElementType;
 };
 
-export function Card({ className, tone = 'default', ...props }: CardProps) {
+export function Card({ as: Component = 'div', className, tone = 'default', ...props }: CardProps) {
   return (
-    <div
+    <Component
       className={cn(
         'rounded-card border shadow-card',
         tone === 'brand' ? 'border-brand-100 bg-brand-50' : tone === 'muted' ? 'border-ink-200 bg-ink-50' : 'border-ink-100 bg-white',
@@ -62,9 +63,10 @@ export function Card({ className, tone = 'default', ...props }: CardProps) {
 
 export type BadgeProps = React.HTMLAttributes<HTMLSpanElement> & {
   tone?: 'neutral' | 'brand' | 'success' | 'warning' | 'danger';
+  as?: React.ElementType;
 };
 
-export function Badge({ className, tone = 'neutral', ...props }: BadgeProps) {
+export function Badge({ as: Component = 'span', className, tone = 'neutral', ...props }: BadgeProps) {
   const toneClass = {
     neutral: 'bg-ink-100 text-ink-500',
     brand: 'bg-brand-50 text-brand-700',
@@ -73,7 +75,7 @@ export function Badge({ className, tone = 'neutral', ...props }: BadgeProps) {
     danger: 'bg-danger-100 text-danger-600',
   }[tone];
 
-  return <span className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', toneClass, className)} {...props} />;
+  return <Component className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', toneClass, className)} {...props} />;
 }
 
 export function FieldLabel({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
@@ -94,4 +96,45 @@ export function TextInput({ className, ...props }: React.InputHTMLAttributes<HTM
 
 export function EmptyState({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('rounded-card border border-dashed border-ink-200 bg-white p-8 text-center text-sm text-ink-500', className)} {...props} />;
+}
+
+export function Page({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('mx-auto max-w-lg p-6 pb-24', className)} {...props} />;
+}
+
+export function SectionTitle({
+  children,
+  icon,
+  action,
+  className,
+}: React.HTMLAttributes<HTMLDivElement> & { icon?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className={cn('mb-4 flex items-center justify-between gap-3', className)}>
+      <h2 className="flex min-w-0 items-center gap-2 text-lg font-semibold text-ink-900">
+        {icon}
+        <span className="truncate">{children}</span>
+      </h2>
+      {action}
+    </div>
+  );
+}
+
+export function ModalSurface({
+  as: Component = 'div',
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { as?: React.ElementType }) {
+  return (
+    <Component
+      className={cn(
+        'relative max-h-[90vh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-6 shadow-2xl sm:max-w-md sm:rounded-card',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function FieldGroup({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('space-y-2', className)} {...props} />;
 }
