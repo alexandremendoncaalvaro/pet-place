@@ -266,7 +266,9 @@ async function routeEventsApi(path: string, method: string, request: Request, en
   if (path.match(/^\/events\/[^/]+\/read$/) && method === 'POST') return markEventRead(env, user, path.split('/')[2]);
   if (path.match(/^\/events\/[^/]+$/) && method === 'DELETE') {
     requireAdmin(user);
-    await env.DB.prepare('DELETE FROM events WHERE id = ?').bind(path.split('/')[2]).run();
+    const eventId = path.split('/')[2];
+    await env.DB.prepare('DELETE FROM events WHERE id = ?').bind(eventId).run();
+    await publishRealtime(env, 'events', 'all', { eventId, action: 'deleted' });
     return json({ ok: true });
   }
   if (path === '/notify-now' && method === 'POST') {
@@ -515,6 +517,8 @@ async function createOfflineUserRoute(request: Request, env: Env): Promise<Respo
     VALUES (?, NULL, ?, ?, ?, '', 'resident', ?, 'active', 1, ?, ?)
   `).bind(id, name, phone, String(data.dogName || ''), `offline+${id}@pet-place.local`, timestamp, timestamp).run();
 
+  await publishRealtime(env, 'users', 'admins', { userId: id, action: 'created' });
+  await publishRealtime(env, 'profiles', 'all', { userId: id, action: 'created' });
   return json({ user: await getUser(env, id) }, 201);
 }
 
@@ -555,6 +559,8 @@ async function updateUserRoute(request: Request, env: Env, user: CurrentUser, us
   if (updated && !updated.isOffline && updated.phone && updated.phone !== existing.phone) {
     await createPhoneLinkSuggestions(env, updated);
   }
+  await publishRealtime(env, 'users', user.role === 'admin' ? 'admins' : userId, { userId, action: 'updated' });
+  await publishRealtime(env, 'profiles', 'all', { userId, action: 'updated' });
   return json({ user: updated });
 }
 
@@ -573,6 +579,7 @@ async function createPhoneLinkSuggestions(env: Env, source: CurrentUser): Promis
   `).bind(newId('link'), source.uid, target.id, source.phone, timestamp));
   await env.DB.batch(statements);
   await insertNotification(env, 'admins', 'Sugestao de vinculo', `${source.name} informou um telefone que bate com ${targets.length} cadastro(s) offline.`);
+  await publishRealtime(env, 'identity-link-suggestions', 'admins', { sourceUserId: source.uid });
 }
 
 async function listIdentityLinkSuggestions(env: Env): Promise<any[]> {
@@ -644,6 +651,11 @@ async function updateIdentityLinkSuggestionRoute(request: Request, env: Env, use
     WHERE id = ?
   `).bind(body.status, now(), user.uid, suggestionId).run();
 
+  await publishRealtime(env, 'identity-link-suggestions', 'admins', { suggestionId, status: body.status });
+  await publishRealtime(env, 'users', 'admins', { suggestionId, action: 'identity-link-resolved' });
+  await publishRealtime(env, 'profiles', 'all', { suggestionId, action: 'identity-link-resolved' });
+  await publishRealtime(env, 'payments', 'all', { suggestionId, action: 'identity-link-resolved' });
+  await publishRealtime(env, 'pets', 'all', { suggestionId, action: 'identity-link-resolved' });
   return json({ ok: true });
 }
 
@@ -654,6 +666,11 @@ async function deleteUser(env: Env, userId: string): Promise<void> {
     env.DB.prepare('DELETE FROM payments WHERE family_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ]);
+  await publishRealtime(env, 'users', 'admins', { userId, action: 'deleted' });
+  await publishRealtime(env, 'profiles', 'all', { userId, action: 'deleted' });
+  await publishRealtime(env, 'pets', 'all', { userId, action: 'deleted' });
+  await publishRealtime(env, 'posts', 'all', { userId, action: 'user-deleted' });
+  await publishRealtime(env, 'payments', 'all', { userId, action: 'user-deleted' });
 }
 
 async function getConfig(env: Env): Promise<any | null> {
@@ -695,6 +712,7 @@ async function updateConfig(env: Env, data: any): Promise<any> {
       payment_instructions = excluded.payment_instructions,
       updated_at = excluded.updated_at
   `).bind(updated.pixKey, updated.monthlyAmount, updated.dueDateDay, updated.paymentInstructions, updated.updatedAt).run();
+  await publishRealtime(env, 'config', 'all', { action: 'updated' });
   return updated;
 }
 
@@ -715,6 +733,7 @@ async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: 
       INSERT INTO payments (id, family_id, month, amount, proof_url, status, type, created_at, updated_at)
       VALUES (?, ?, ?, ?, '', 'pending', 'mensalidade', ?, ?)
     `).bind(newId('pay'), targetFamilyId, month, config.monthlyAmount, timestamp, timestamp).run();
+    await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month, action: 'created' });
   }
   return json({ ok: true });
 }
@@ -771,6 +790,7 @@ async function submitDonationRoute(request: Request, env: Env, user: CurrentUser
     VALUES (?, ?, ?, ?, ?, '', 'analyzing', 'doacao', ?, ?)
   `).bind(id, targetFamilyId, timestamp.slice(0, 7), Number(form.get('amount') || 0), proofKey, timestamp, timestamp).run();
   await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${Number(form.get('amount') || 0).toFixed(2)} aguarda análise.`);
+  await publishRealtime(env, 'payments', 'all', { paymentId: id, familyId: targetFamilyId, action: 'created' });
   return json({ payment: (await listPayments(env, targetFamilyId)).find((p) => p.id === id) });
 }
 
@@ -806,6 +826,7 @@ async function createManualPaymentRoute(request: Request, env: Env, _user: Curre
         SET amount = ?, proof_key = ?, proof_url = '', status = 'approved', description = ?, updated_at = ?
         WHERE id = ?
       `).bind(amount, proofKey, description, timestamp, paymentId).run();
+      await publishRealtime(env, 'payments', 'all', { paymentId, familyId: familyIdValue, action: 'updated' });
       return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) });
     }
   }
@@ -815,6 +836,7 @@ async function createManualPaymentRoute(request: Request, env: Env, _user: Curre
     VALUES (?, ?, ?, ?, ?, '', 'approved', ?, ?, ?, ?)
   `).bind(paymentId, familyIdValue, month, amount, proofKey, type, description, timestamp, timestamp).run();
 
+  await publishRealtime(env, 'payments', 'all', { paymentId, familyId: familyIdValue, action: 'created' });
   return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) }, 201);
 }
 
@@ -829,6 +851,7 @@ async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, p
   await env.DB.prepare('UPDATE payments SET proof_key = ?, proof_url = "", status = "analyzing", updated_at = ? WHERE id = ?')
     .bind(key, now(), paymentId).run();
   await insertNotification(env, 'admins', 'Comprovante Recebido', 'Um novo comprovante foi anexado e aguarda avaliação.');
+  await publishRealtime(env, 'payments', 'all', { paymentId, familyId: payment.family_id, action: 'proof-uploaded' });
   return json({ ok: true });
 }
 
@@ -836,6 +859,7 @@ async function updatePaymentStatusRoute(request: Request, env: Env, paymentId: s
   const body = await request.json<{ status: PaymentStatus }>();
   if (!['pending', 'analyzing', 'approved', 'rejected'].includes(body.status)) return bad('Status inválido.', 400);
   await env.DB.prepare('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?').bind(body.status, now(), paymentId).run();
+  await publishRealtime(env, 'payments', 'all', { paymentId, status: body.status, action: 'status-updated' });
   return json({ ok: true });
 }
 
@@ -844,6 +868,7 @@ async function deletePaymentRoute(env: Env, user: CurrentUser, paymentId: string
   if (!row) return json({ ok: true });
   if (user.role !== 'admin' && !(row.family_id === familyId(user) && row.status === 'pending')) throw new HttpError('Sem permissão para remover este pagamento.', 403);
   await env.DB.prepare('DELETE FROM payments WHERE id = ?').bind(paymentId).run();
+  await publishRealtime(env, 'payments', 'all', { paymentId, familyId: row.family_id, action: 'deleted' });
   return json({ ok: true });
 }
 
@@ -892,6 +917,7 @@ async function createChargesRoute(request: Request, env: Env): Promise<Response>
     );
   });
   if (statements.length) await env.DB.batch(statements);
+  await publishRealtime(env, 'payments', 'all', { action: 'charges-created', count: statements.length });
   return json({ ok: true });
 }
 
@@ -920,6 +946,7 @@ async function addExpenseRoute(request: Request, env: Env, user: CurrentUser): P
     INSERT INTO expenses (id, date, title, category, amount, receipt_key, receipt_url, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)
   `).bind(id, data.date, data.title, data.category, Number(data.amount || 0), key, user.uid, data.createdAt || now()).run();
+  await publishRealtime(env, 'expenses', 'all', { expenseId: id, action: 'created' });
   return json({ expense: (await listExpenses(env)).find((e) => e.id === id) });
 }
 
@@ -947,6 +974,7 @@ async function addPetRoute(request: Request, env: Env, user: CurrentUser): Promi
     INSERT INTO pets (id, owner_id, name, photo_key, photo_url, breed, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).bind(id, data.ownerId, data.name, photoKey, photoKey ? '' : data.photoUrl || '', data.breed || '', now()).run();
+  await publishRealtime(env, 'pets', 'all', { petId: id, ownerId: data.ownerId, action: 'created' });
   return json({ pet: (await listPets(env)).find((p) => p.id === id) });
 }
 
@@ -961,6 +989,7 @@ async function updatePetRoute(request: Request, env: Env, user: CurrentUser, pet
   await env.DB.prepare(`
     UPDATE pets SET name = ?, breed = ?, photo_key = COALESCE(?, photo_key), photo_url = ? WHERE id = ?
   `).bind(data.name ?? pet.name, data.breed ?? pet.breed, photoKey, photoKey ? '' : data.photoUrl ?? pet.photo_url ?? '', petId).run();
+  await publishRealtime(env, 'pets', 'all', { petId, ownerId: pet.owner_id, action: 'updated' });
   return json({ pet: (await listPets(env)).find((p) => p.id === petId) });
 }
 
@@ -968,6 +997,7 @@ async function deletePetRoute(env: Env, user: CurrentUser, petId: string): Promi
   const pet = await env.DB.prepare('SELECT * FROM pets WHERE id = ?').bind(petId).first<any>();
   if (pet && pet.owner_id !== user.uid && user.role !== 'admin') throw new HttpError('Sem permissão para este pet.', 403);
   await env.DB.prepare('DELETE FROM pets WHERE id = ?').bind(petId).run();
+  await publishRealtime(env, 'pets', 'all', { petId, ownerId: pet?.owner_id, action: 'deleted' });
   return json({ ok: true });
 }
 
@@ -1020,6 +1050,7 @@ async function addEvent(env: Env, user: CurrentUser, data: any): Promise<any> {
     user.uid,
     now(),
   ).run();
+  await publishRealtime(env, 'events', 'all', { eventId: id, action: 'created' });
   return (await listEvents(env)).find((event) => event.id === id);
 }
 
@@ -1029,6 +1060,7 @@ async function markEventRead(env: Env, user: CurrentUser, eventId: string): Prom
     VALUES (?, ?, ?)
     ON CONFLICT(event_id, user_id) DO NOTHING
   `).bind(eventId, user.uid, now()).run();
+  await publishRealtime(env, 'events', 'all', { eventId, userId: user.uid, action: 'read' });
   return json({ ok: true });
 }
 
@@ -1084,6 +1116,7 @@ async function markNotificationRead(env: Env, user: CurrentUser, id: string): Pr
     UPDATE notifications SET is_read = 1
     WHERE id = ? AND (user_id = ? OR user_id = 'all' OR (user_id = 'admins' AND ? = 'admin'))
   `).bind(id, user.uid, user.role).run();
+  await publishRealtime(env, 'notifications', user.uid, { id, action: 'read' });
   return json({ ok: true });
 }
 
