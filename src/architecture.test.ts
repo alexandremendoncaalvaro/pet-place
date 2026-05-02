@@ -45,4 +45,14 @@ describe('project architecture guardrails', () => {
 
     expect(legacyFiles.filter((file) => existsSync(join(root, file)))).toEqual([]);
   });
+
+  it('keeps the public README grounded in repo assets and design docs', () => {
+    const readme = read('README.md');
+
+    expect(existsSync(join(root, 'assets/pet-place.jpeg'))).toBe(true);
+    expect(existsSync(join(root, 'docs/DESIGN_SYSTEM.md'))).toBe(true);
+    expect(readme).toContain('assets/pet-place.jpeg');
+    expect(readme).toContain('docs/DESIGN_SYSTEM.md');
+    expect(readme).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
 });
