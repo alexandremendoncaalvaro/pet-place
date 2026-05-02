@@ -102,14 +102,14 @@ export async function submitDonation(amount: number, file: File, familyId: strin
   const form = new FormData();
   form.set('amount', String(amount));
   form.set('familyId', familyId);
-  form.set('file', await compressImage(file));
+  form.set('file', file);
   await api('/payments/donation', { method: 'POST', body: form });
   notifyDataChanged();
 }
 
 export async function uploadProofAndSubmit(paymentId: string, file: File) {
   const form = new FormData();
-  form.set('file', await compressImage(file));
+  form.set('file', file);
   await api(`/payments/${encodeURIComponent(paymentId)}/proof`, { method: 'POST', body: form });
   notifyDataChanged();
 }
