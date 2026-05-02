@@ -1,5 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { DurableObject } from 'cloudflare:workers';
+import { commentNotification, likeNotification } from '../src/lib/notificationPolicy';
+
 type Role = 'admin' | 'resident';
 type PaymentStatus = 'pending' | 'analyzing' | 'approved' | 'rejected';
 
@@ -15,6 +18,7 @@ interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  REALTIME: DurableObjectNamespace<RealtimeHub>;
 }
 
 interface SessionPayload {
@@ -36,8 +40,70 @@ interface CurrentUser {
   createdAt: string;
 }
 
+type RealtimeTarget = 'all' | 'admins' | string;
+
+interface RealtimeEvent {
+  topic: string;
+  target: RealtimeTarget;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+}
+
 const SESSION_COOKIE = 'cpp_session';
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
+
+export class RealtimeHub extends DurableObject<Env> {
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env);
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname.endsWith('/publish') && request.method === 'POST') {
+      const event = await request.json<RealtimeEvent>();
+      this.broadcast(event);
+      return json({ ok: true });
+    }
+
+    if (request.headers.get('Upgrade') !== 'websocket') return bad('Upgrade websocket ausente.', 426);
+    const userId = request.headers.get('x-user-id');
+    const role = request.headers.get('x-user-role');
+    if (!userId) return bad('Usuário ausente.', 401);
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
+    server.serializeAttachment({ userId, role });
+    this.ctx.acceptWebSocket(server, ['all', `user:${userId}`, role === 'admin' ? 'admins' : 'users']);
+    server.send(JSON.stringify({ topic: 'realtime:ready', target: userId, createdAt: now() }));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {
+    if (message === 'ping') ws.send('pong');
+  }
+
+  async webSocketClose() {
+    // The hibernation API removes closed sockets from state automatically.
+  }
+
+  private broadcast(event: RealtimeEvent) {
+    const tags = event.target === 'all'
+      ? ['all']
+      : event.target === 'admins'
+        ? ['admins']
+        : [`user:${event.target}`];
+    const message = JSON.stringify(event);
+    for (const tag of tags) {
+      for (const ws of this.ctx.getWebSockets(tag)) {
+        try {
+          ws.send(message);
+        } catch {
+          try { ws.close(1011, 'send failed'); } catch {}
+        }
+      }
+    }
+  }
+}
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -68,6 +134,7 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
 
   const user = await requireUser(request, env);
   const authenticatedResponse =
+    await routeRealtimeApi(path, method, request, env, user) ||
     await routeSessionApi(path, method, user) ||
     await routeMediaApi(path, method, request, env, user) ||
     await routeConfigApi(path, method, request, env, user) ||
@@ -83,6 +150,15 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
 
   if (authenticatedResponse) return authenticatedResponse;
   return bad('Rota nao encontrada.', 404);
+}
+
+async function routeRealtimeApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path !== '/realtime' || method !== 'GET') return null;
+  const headers = new Headers(request.headers);
+  headers.set('x-user-id', user.uid);
+  headers.set('x-user-role', user.role);
+  const stub = env.REALTIME.get(env.REALTIME.idFromName('global'));
+  return stub.fetch(new Request(request, { headers }));
 }
 
 async function routePublicApi(path: string, method: string, request: Request, env: Env): Promise<Response | null> {
@@ -245,6 +321,20 @@ function json(data: unknown, status = 200, headers: HeadersInit = {}): Response 
 
 function bad(message: string, status = 400): Response {
   return json({ error: message }, status);
+}
+
+async function publishRealtime(env: Env, topic: string, target: RealtimeTarget = 'all', payload: Record<string, unknown> = {}): Promise<void> {
+  if (!env.REALTIME) return;
+  try {
+    const stub = env.REALTIME.get(env.REALTIME.idFromName('global'));
+    await stub.fetch('https://realtime.internal/publish', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ topic, target, payload, createdAt: now() } satisfies RealtimeEvent),
+    });
+  } catch (error) {
+    console.warn('Falha ao publicar evento realtime:', error);
+  }
 }
 
 function now(): string {
@@ -959,6 +1049,12 @@ async function latestNotification(env: Env, user: CurrentUser): Promise<any | nu
 }
 
 function rowToNotification(row: any): any {
+  let data: Record<string, unknown> | undefined;
+  try {
+    data = row.data_json ? JSON.parse(row.data_json) : undefined;
+  } catch {
+    data = undefined;
+  }
   return {
     id: row.id,
     userId: row.user_id,
@@ -966,13 +1062,20 @@ function rowToNotification(row: any): any {
     message: row.message,
     isRead: !!row.is_read,
     createdAt: row.created_at,
+    type: row.type || 'generic',
+    actorId: row.actor_id || undefined,
+    entityType: row.entity_type || undefined,
+    entityId: row.entity_id || undefined,
+    aggregationKey: row.aggregation_key || undefined,
+    count: row.count || 1,
+    data,
   };
 }
 
 async function addNotificationRoute(request: Request, env: Env, user: CurrentUser): Promise<Response> {
   const data = await request.json<any>();
   if (user.role !== 'admin' && data.userId !== 'admins') throw new HttpError('Sem permissão para criar esta notificação.', 403);
-  const notification = await insertNotification(env, data.userId, data.title, data.message || '');
+  const notification = await insertNotification(env, data.userId, data.title, data.message || '', { type: data.type || 'generic' });
   return json({ notification });
 }
 
@@ -984,15 +1087,84 @@ async function markNotificationRead(env: Env, user: CurrentUser, id: string): Pr
   return json({ ok: true });
 }
 
-async function insertNotification(env: Env, userId: string, title: string, message: string): Promise<any> {
+interface InsertNotificationOptions {
+  type?: string;
+  actorId?: string;
+  entityType?: string;
+  entityId?: string;
+  aggregationKey?: string;
+  count?: number;
+  data?: Record<string, unknown>;
+  push?: boolean;
+}
+
+async function insertNotification(env: Env, userId: string, title: string, message: string, options: InsertNotificationOptions = {}): Promise<any> {
   const id = newId('notif');
+  const timestamp = now();
   await env.DB.prepare(`
-    INSERT INTO notifications (id, user_id, title, message, is_read, created_at)
-    VALUES (?, ?, ?, ?, 0, ?)
-  `).bind(id, userId, title, message, now()).run();
-  await sendPushForTarget(env, userId);
+    INSERT INTO notifications (
+      id, user_id, title, message, is_read, created_at, type, actor_id,
+      entity_type, entity_id, aggregation_key, count, data_json, updated_at
+    )
+    VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id,
+    userId,
+    title,
+    message,
+    timestamp,
+    options.type || 'generic',
+    options.actorId || null,
+    options.entityType || null,
+    options.entityId || null,
+    options.aggregationKey || null,
+    options.count || 1,
+    options.data ? JSON.stringify(options.data) : null,
+    timestamp,
+  ).run();
+  if (options.push !== false) await sendPushForTarget(env, userId);
   const row = await env.DB.prepare('SELECT * FROM notifications WHERE id = ?').bind(id).first<any>();
-  return rowToNotification(row);
+  const notification = rowToNotification(row);
+  await publishRealtime(env, 'notifications', userId, { id: notification.id, type: notification.type });
+  return notification;
+}
+
+async function upsertLikeNotification(env: Env, post: any, actor: CurrentUser): Promise<void> {
+  if (!post || post.author_id === actor.uid) return;
+  const aggregationKey = `post_like:${post.id}`;
+  const existing = await env.DB.prepare(`
+    SELECT * FROM notifications
+    WHERE user_id = ? AND aggregation_key = ? AND is_read = 0
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).bind(post.author_id, aggregationKey).first<any>();
+  const likeCount = await countPostLikes(env, post.id);
+  const copy = likeNotification({ actorName: actor.name, count: existing ? Math.max(likeCount, (existing.count || 1) + 1) : 1 });
+
+  if (!existing) {
+    await insertNotification(env, post.author_id, copy.title, copy.message, {
+      type: copy.type,
+      actorId: actor.uid,
+      entityType: 'post',
+      entityId: post.id,
+      aggregationKey,
+      count: 1,
+      data: { postId: post.id },
+    });
+    return;
+  }
+
+  await env.DB.prepare(`
+    UPDATE notifications
+    SET title = ?, message = ?, actor_id = ?, count = ?, updated_at = ?
+    WHERE id = ?
+  `).bind(copy.title, copy.message, actor.uid, Math.max(likeCount, (existing.count || 1) + 1), now(), existing.id).run();
+  await publishRealtime(env, 'notifications', post.author_id, { id: existing.id, type: copy.type });
+}
+
+async function countPostLikes(env: Env, postId: string): Promise<number> {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS count FROM post_likes WHERE post_id = ?').bind(postId).first<any>();
+  return Number(row?.count || 0);
 }
 
 async function listPosts(env: Env, limit: number): Promise<any[]> {
@@ -1037,6 +1209,7 @@ async function addPostRoute(request: Request, env: Env, user: CurrentUser): Prom
   if (Array.isArray(data.tags) && data.tags.length) {
     await env.DB.batch(data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
   }
+  await publishRealtime(env, 'posts', 'all', { postId: id, action: 'created' });
   return json({ post: (await listPosts(env, 1)).find((p) => p.id === id), id });
 }
 
@@ -1050,6 +1223,7 @@ async function updatePostRoute(request: Request, env: Env, user: CurrentUser, po
     env.DB.prepare('DELETE FROM post_tags WHERE post_id = ?').bind(postId),
     ...(Array.isArray(data.tags) ? data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(postId, tag)) : []),
   ]);
+  await publishRealtime(env, 'posts', 'all', { postId, action: 'updated' });
   return json({ ok: true });
 }
 
@@ -1057,6 +1231,7 @@ async function deletePostRoute(env: Env, user: CurrentUser, postId: string): Pro
   const post = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(postId).first<any>();
   if (post && post.author_id !== user.uid && user.role !== 'admin') throw new HttpError('Sem permissão para remover este post.', 403);
   await env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(postId).run();
+  await publishRealtime(env, 'posts', 'all', { postId, action: 'deleted' });
   return json({ ok: true });
 }
 
@@ -1074,11 +1249,25 @@ async function listComments(env: Env, postId: string): Promise<any[]> {
 async function addCommentRoute(request: Request, env: Env, user: CurrentUser, postId: string): Promise<Response> {
   const data = await request.json<any>();
   if (data.authorId !== user.uid) throw new HttpError('Sem permissão para comentar por outro usuário.', 403);
+  const post = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(postId).first<any>();
+  if (!post) return bad('Post não encontrado.', 404);
   const id = newId('comment');
   await env.DB.prepare(`
     INSERT INTO post_comments (id, post_id, author_id, content, created_at)
     VALUES (?, ?, ?, ?, ?)
   `).bind(id, postId, user.uid, data.content || '', now()).run();
+  if (post.author_id !== user.uid) {
+    const copy = commentNotification({ actorName: user.name });
+    await insertNotification(env, post.author_id, copy.title, copy.message, {
+      type: copy.type,
+      actorId: user.uid,
+      entityType: 'post',
+      entityId: postId,
+      data: { postId, commentId: id },
+    });
+  }
+  await publishRealtime(env, `comments:${postId}`, 'all', { postId, commentId: id, action: 'created' });
+  await publishRealtime(env, 'posts', 'all', { postId, action: 'commented' });
   return json({ comment: (await listComments(env, postId)).find((c) => c.id === id) });
 }
 
@@ -1093,16 +1282,24 @@ async function deleteCommentRoute(env: Env, user: CurrentUser, commentId: string
     throw new HttpError('Sem permissão para remover este comentário.', 403);
   }
   await env.DB.prepare('DELETE FROM post_comments WHERE id = ?').bind(commentId).run();
+  if (comment?.post_id) {
+    await publishRealtime(env, `comments:${comment.post_id}`, 'all', { postId: comment.post_id, commentId, action: 'deleted' });
+  }
   return json({ ok: true });
 }
 
 async function toggleLikeRoute(request: Request, env: Env, user: CurrentUser, postId: string): Promise<Response> {
   const body = await request.json<{ currentlyLiked: boolean }>();
+  const post = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(postId).first<any>();
+  if (!post) return bad('Post não encontrado.', 404);
   if (body.currentlyLiked) {
     await env.DB.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.uid).run();
   } else {
+    const existing = await env.DB.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.uid).first<any>();
     await env.DB.prepare('INSERT OR IGNORE INTO post_likes (post_id, user_id, created_at) VALUES (?, ?, ?)').bind(postId, user.uid, now()).run();
+    if (!existing) await upsertLikeNotification(env, post, user);
   }
+  await publishRealtime(env, 'posts', 'all', { postId, action: body.currentlyLiked ? 'unliked' : 'liked' });
   return json({ ok: true });
 }
 

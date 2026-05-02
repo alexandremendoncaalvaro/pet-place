@@ -34,6 +34,14 @@ describe('project architecture guardrails', () => {
     expect(workflow).not.toMatch(/^\s*-\s+develop\s*$/m);
   });
 
+  it('keeps realtime infrastructure declared in Wrangler', () => {
+    const wrangler = read('wrangler.toml');
+
+    expect(wrangler).toContain('name = "REALTIME"');
+    expect(wrangler).toContain('class_name = "RealtimeHub"');
+    expect(wrangler).toContain('new_sqlite_classes = ["RealtimeHub"]');
+  });
+
   it('keeps legacy Firebase runtime files out of the public repo root', () => {
     const legacyFiles = [
       'firebase.json',
