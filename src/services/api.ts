@@ -1,10 +1,10 @@
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, Payment, PaymentStatus, Pet, Role, UserProfile } from '../lib/types';
-import imageCompression from 'browser-image-compression';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
+import { API_BASE, api, toApiError } from './http';
+import { notifyDataChanged, subscribe } from './subscriptions';
+import { compressImage } from './uploads';
+export { requestPushToken } from './push';
 
 export let isRealBackend = true;
-
-const API_BASE = ((import.meta as any).env.VITE_API_URL || '').replace(/\/$/, '');
-const DATA_CHANGED_EVENT = 'caixinha:data-changed';
 
 export async function initBackend() {
   try {
@@ -40,42 +40,6 @@ export function subscribeToAuth(callback: (user: UserProfile | null) => void) {
       throw error;
     }
   }, callback, 60000);
-}
-
-export async function requestPushToken(_userId: string) {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
-  await unregisterLegacyServiceWorkers();
-
-  const permission = await window.Notification.requestPermission();
-  if (permission !== 'granted') return;
-
-  const { publicKey } = await api<{ publicKey: string }>('/push/vapid-public-key');
-  if (!publicKey) return;
-
-  const registration = await navigator.serviceWorker.register('/push-sw.js');
-  const existing = await registration.pushManager.getSubscription();
-  const subscription = existing || await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
-  });
-  await api('/push-subscriptions', {
-    method: 'POST',
-    body: JSON.stringify({ subscription }),
-  });
-}
-
-async function unregisterLegacyServiceWorkers() {
-  try {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations
-      .filter((registration) => {
-        const scriptUrl = registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || '';
-        return scriptUrl.includes('firebase-messaging-sw.js');
-      })
-      .map((registration) => registration.unregister()));
-  } catch (error) {
-    console.warn('Legacy service worker cleanup failed:', error);
-  }
 }
 
 export async function ensureCurrentMonthPayment(familyId: string, notify = true) {
@@ -277,8 +241,8 @@ export async function updatePost(postId: string, content: string, tags: string[]
   notifyDataChanged();
 }
 
-export function subscribeToComments(postId: string, callback: (comments: any[]) => void) {
-  return subscribe(async () => (await api<{ comments: any[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 30000);
+export function subscribeToComments(postId: string, callback: (comments: PostComment[]) => void) {
+  return subscribe(async () => (await api<{ comments: PostComment[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 30000);
 }
 
 export async function addComment(postId: string, authorId: string, content: string) {
@@ -318,80 +282,4 @@ export async function restoreZippedBackup(zipFile: File): Promise<void> {
 export async function deleteUserAndData(userId: string) {
   await api(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
   notifyDataChanged();
-}
-
-async function api<T = any>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  const hasForm = init.body instanceof FormData;
-  if (!hasForm && init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    ...init,
-    headers,
-    credentials: 'include',
-  });
-  if (!res.ok) throw await toApiError(res);
-  if (res.status === 204) return undefined as T;
-  return await res.json() as T;
-}
-
-async function toApiError(res: Response) {
-  let message = `Erro HTTP ${res.status}`;
-  try {
-    const data: any = await res.json();
-    message = data.error || message;
-  } catch {
-    message = await res.text() || message;
-  }
-  const error = new Error(message) as Error & { status?: number };
-  error.status = res.status;
-  return error;
-}
-
-function subscribe<T>(loader: () => Promise<T>, callback: (value: T) => void, intervalMs = 60000) {
-  let stopped = false;
-  let loading = false;
-  const load = async () => {
-    if (stopped || loading) return;
-    loading = true;
-    try {
-      callback(await loader());
-    } catch (error) {
-      console.error('Subscription refresh failed:', error);
-    } finally {
-      loading = false;
-    }
-  };
-  load();
-  const interval = window.setInterval(load, intervalMs);
-  window.addEventListener(DATA_CHANGED_EVENT, load);
-  return () => {
-    stopped = true;
-    window.clearInterval(interval);
-    window.removeEventListener(DATA_CHANGED_EVENT, load);
-  };
-}
-
-function notifyDataChanged() {
-  window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
-}
-
-async function compressImage(file: File) {
-  if (!file.type.startsWith('image/')) return file;
-  try {
-    return await imageCompression(file, {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1280,
-      useWebWorker: true,
-    });
-  } catch (error) {
-    console.error('Compression error', error);
-    return file;
-  }
-}
-
-function urlBase64ToUint8Array(value: string) {
-  const padding = '='.repeat((4 - value.length % 4) % 4);
-  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = window.atob(base64);
-  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
 }
