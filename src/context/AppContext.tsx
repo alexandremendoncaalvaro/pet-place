@@ -23,6 +23,7 @@ import {
 
 interface AppState {
   user: UserProfile | null;
+  isAdmin: boolean;
   loading: boolean;
   myPayments: Payment[];
   allPayments: Payment[];
@@ -79,6 +80,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [viewPetId, setViewPetId] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<{url: string, title?: string} | null>(null);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +181,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       user,
+      isAdmin,
       loading,
       myPayments,
       allPayments,

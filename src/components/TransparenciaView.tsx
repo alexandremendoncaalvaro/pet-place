@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ArrowDownCircle, ArrowUpCircle, Filter, Receipt } from 'lucide-react';
+import { buildCashLedger, calculateCashSummary } from '../lib/finance';
 
 export function TransparenciaView() {
   const { allPayments, allExpenses, setFullscreenImage } = useApp();
@@ -11,8 +12,8 @@ export function TransparenciaView() {
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
-    allPayments.forEach(p => months.add(p.month));
-    allExpenses.forEach(e => months.add(e.date.substring(0, 7)));
+    allPayments.forEach((payment) => months.add(payment.month));
+    allExpenses.forEach((expense) => months.add(expense.date.substring(0, 7)));
     const sorted = Array.from(months).sort().reverse();
     if (!sorted.includes(currentMonthStr)) {
       sorted.unshift(currentMonthStr);
@@ -22,53 +23,17 @@ export function TransparenciaView() {
 
   const filteredPayments = useMemo(() => {
     if (period === 'all') return allPayments;
-    return allPayments.filter(p => p.month === period);
+    return allPayments.filter((payment) => payment.month === period);
   }, [allPayments, period]);
 
   const filteredExpenses = useMemo(() => {
     if (period === 'all') return allExpenses;
-    return allExpenses.filter(e => e.date.startsWith(period));
+    return allExpenses.filter((expense) => expense.date.startsWith(period));
   }, [allExpenses, period]);
 
-  const approvedPayments = useMemo(() => {
-    return filteredPayments.filter(p => p.status === 'approved');
-  }, [filteredPayments]);
-
-  const totalEntradas = useMemo(() => {
-    return approvedPayments.reduce((acc, p) => acc + p.amount, 0);
-  }, [approvedPayments]);
-
-  const totalSaidas = useMemo(() => {
-    return filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
-  }, [filteredExpenses]);
-
-  const ledger = useMemo(() => {
-    const entradas = approvedPayments.map(payment => ({
-      id: `payment-${payment.id}`,
-      kind: 'entrada' as const,
-      title: payment.type === 'doacao' ? 'Doação' : payment.type === 'rateio' ? 'Rateio' : 'Mensalidade',
-      subtitle: [payment.userName || 'Morador', payment.description].filter(Boolean).join(' - '),
-      date: payment.updatedAt || payment.createdAt,
-      amount: payment.amount,
-      proofUrl: payment.proofUrl,
-    }));
-    const saidas = filteredExpenses.map(expense => ({
-      id: `expense-${expense.id}`,
-      kind: 'saida' as const,
-      title: expense.title,
-      subtitle: expense.category,
-      date: expense.date,
-      amount: expense.amount,
-      proofUrl: expense.receiptUrl,
-    }));
-    return [...entradas, ...saidas].sort((a, b) => {
-      const aDate = a.date.includes('T') ? a.date : `${a.date}T00:00:00.000Z`;
-      const bDate = b.date.includes('T') ? b.date : `${b.date}T00:00:00.000Z`;
-      return bDate.localeCompare(aDate);
-    });
-  }, [approvedPayments, filteredExpenses]);
-
-  const saldo = totalEntradas - totalSaidas;
+  const summary = useMemo(() => calculateCashSummary(filteredPayments, filteredExpenses), [filteredPayments, filteredExpenses]);
+  const ledger = useMemo(() => buildCashLedger(filteredPayments, filteredExpenses), [filteredPayments, filteredExpenses]);
+  const { totalEntradas, totalSaidas, saldo } = summary;
   const isNegative = saldo < 0;
 
   return (
@@ -78,13 +43,13 @@ export function TransparenciaView() {
         <div className="relative">
           <select
             value={period}
-            onChange={e => setPeriod(e.target.value)}
+            onChange={(event) => setPeriod(event.target.value)}
             className="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2 pl-4 pr-8 rounded-full text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
           >
             <option value="all">Todo o período</option>
-            {availableMonths.map(m => (
-              <option key={m} value={m}>
-                {format(parseISO(`${m}-01`), 'MMM yyyy', { locale: ptBR })}
+            {availableMonths.map((month) => (
+              <option key={month} value={month}>
+                {format(parseISO(`${month}-01`), 'MMM yyyy', { locale: ptBR })}
               </option>
             ))}
           </select>
@@ -146,7 +111,7 @@ export function TransparenciaView() {
               {item.proofUrl && (
                 <div className="mt-4 border-t border-gray-100 pt-3">
                   <span
-                    onClick={() => setFullscreenImage({url: item.proofUrl!, title: `Comprovante: ${item.title}`})}
+                    onClick={() => setFullscreenImage({ url: item.proofUrl!, title: `Comprovante: ${item.title}` })}
                     className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg font-medium cursor-pointer inline-flex items-center active:scale-95 transition-all"
                   >
                     Ver Comprovante

@@ -192,7 +192,8 @@ export function AdminPanel() {
                         className="flex items-center gap-1 inline-flex"
                         onSubmit={(e) => {
                           e.preventDefault();
-                          updateProfile(u.uid, { phone: normalizePhoneBR((e.target as any).elements.phone.value) });
+                          const formData = new FormData(e.currentTarget);
+                          updateProfile(u.uid, { phone: normalizePhoneBR(String(formData.get('phone') || '')) });
                           setEditingPhoneUid(null);
                         }}
                       >
@@ -225,11 +226,12 @@ export function AdminPanel() {
                 <button 
                   onClick={() => {
                     const isAdmin = u.role === 'admin';
-                    // Assuming they can toggle via a double-tap/long press or we just build an inline confirm. Let's just use double-click logic using a flag, or simpler: since they are admin, just allow direct toggle, or maybe a simple confirm state. To avoid complexity, we just toggle.
+                    const nextRole = isAdmin ? 'resident' : 'admin';
+                    if (!confirm(`Alterar ${u.name} para ${nextRole === 'admin' ? 'Admin' : 'Pessoa'}?`)) return;
                     updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
                   }}
                   className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
-                  title="Clique duplo para alterar o papel"
+                  title="Alterar papel"
                 >
                   {u.role === 'admin' ? 'Admin' : 'Pessoa'}
                 </button>
@@ -648,9 +650,6 @@ function RateioForm() {
   const [amountStr, setAmountStr] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
-
-  const [showRateioConfirm, setShowRateioConfirm] = useState(false);
-  const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
   // Active users only to avoid charging pending/blocked people unless desired, but let's just show all active
   const selectableUsers = allUsers.filter(u => u.userStatus === 'active' || u.userStatus === undefined);
