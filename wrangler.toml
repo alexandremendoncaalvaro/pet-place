@@ -1,0 +1,87 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "pet-place"
+main = "worker/index.ts"
+compatibility_date = "2026-05-02"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "caixinha_pet_place"
+database_id = "7ce089cf-92b6-4822-ac50-5cdbaf3cf3f8"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "caixinha-pet-media"
+
+[vars]
+APP_URL = "https://pet-place.pages.dev"
+BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
+VAPID_SUBJECT = "mailto:peritto@gmail.com"
+
+# Configure secrets with Wrangler:
+# - GOOGLE_CLIENT_ID
+# - GOOGLE_CLIENT_SECRET
+# - SESSION_SECRET
+# - VAPID_PUBLIC_KEY
+# - VAPID_PRIVATE_KEY
+
+[env.production]
+name = "pet-place"
+main = "worker/index.ts"
+compatibility_date = "2026-05-02"
+
+[env.production.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[env.production.triggers]
+crons = ["*/15 * * * *"]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "caixinha_pet_place"
+database_id = "7ce089cf-92b6-4822-ac50-5cdbaf3cf3f8"
+
+[[env.production.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "caixinha-pet-media"
+
+[env.production.vars]
+APP_URL = "https://pet-place.pages.dev"
+BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
+VAPID_SUBJECT = "mailto:peritto@gmail.com"
+
+[env.dev]
+name = "pet-place-dev"
+main = "worker/index.ts"
+compatibility_date = "2026-05-02"
+
+[env.dev.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[env.dev.triggers]
+crons = ["*/15 * * * *"]
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "caixinha_pet_place_dev"
+database_id = "02f66aa6-e483-4ca0-a49b-9b5889d95946"
+
+[[env.dev.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "caixinha-pet-media-dev"
+
+[env.dev.vars]
+APP_URL = "https://pet-place-dev.pages.dev"
+BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
+VAPID_SUBJECT = "mailto:peritto@gmail.com"

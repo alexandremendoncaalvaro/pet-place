@@ -9,7 +9,6 @@ export interface UserProfile {
   photoUrl?: string;
   role: Role;
   email: string;
-  fcmToken?: string;
   familyId?: string;
   userStatus?: 'pending' | 'active' | 'blocked';
   createdAt: string;

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
 import { 
-  initFirebase, 
+  initBackend, 
   subscribeToAuth, 
   loginWithGoogle, 
   logout, 
@@ -79,7 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubPosts: () => void;
-    initFirebase().then(() => {
+    initBackend().then(() => {
       unsubPosts = subscribeToAllPosts(postLimit, setPosts);
     });
     return () => {
@@ -101,7 +101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let unsubEvents: () => void;
     let unsubNotifs: () => void;
 
-    initFirebase().then(() => {
+    initBackend().then(() => {
       unsubConfig = subscribeToConfig(setAppConfig);
       unsubEvents = subscribeToAllEvents(setEvents);
       unsubAuth = subscribeToAuth((u) => {

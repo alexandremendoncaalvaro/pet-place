@@ -6,4 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+.dev.vars
 .wrangler/
+.venv/
+__pycache__/
+*.pyc
+tools/migrate/.venv/
+.migration/
+migration-export/

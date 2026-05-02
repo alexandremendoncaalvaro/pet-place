@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Receipt, Filter } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Filter, Receipt } from 'lucide-react';
 
 export function TransparenciaView() {
   const { allPayments, allExpenses, setFullscreenImage } = useApp();
@@ -29,13 +29,46 @@ export function TransparenciaView() {
     if (period === 'all') return allExpenses;
     return allExpenses.filter(e => e.date.startsWith(period));
   }, [allExpenses, period]);
-  
-  const saldo = useMemo(() => {
-    const totalEntradas = filteredPayments.filter(p => p.status === 'approved').reduce((acc, p) => acc + p.amount, 0);
-    const totalSaidas = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
-    return totalEntradas - totalSaidas;
-  }, [filteredPayments, filteredExpenses]);
 
+  const approvedPayments = useMemo(() => {
+    return filteredPayments.filter(p => p.status === 'approved');
+  }, [filteredPayments]);
+
+  const totalEntradas = useMemo(() => {
+    return approvedPayments.reduce((acc, p) => acc + p.amount, 0);
+  }, [approvedPayments]);
+
+  const totalSaidas = useMemo(() => {
+    return filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+  }, [filteredExpenses]);
+
+  const ledger = useMemo(() => {
+    const entradas = approvedPayments.map(payment => ({
+      id: `payment-${payment.id}`,
+      kind: 'entrada' as const,
+      title: payment.type === 'doacao' ? 'Doação' : payment.type === 'rateio' ? 'Rateio' : 'Mensalidade',
+      subtitle: [payment.userName || 'Morador', payment.description].filter(Boolean).join(' - '),
+      date: payment.updatedAt || payment.createdAt,
+      amount: payment.amount,
+      proofUrl: payment.proofUrl,
+    }));
+    const saidas = filteredExpenses.map(expense => ({
+      id: `expense-${expense.id}`,
+      kind: 'saida' as const,
+      title: expense.title,
+      subtitle: expense.category,
+      date: expense.date,
+      amount: expense.amount,
+      proofUrl: expense.receiptUrl,
+    }));
+    return [...entradas, ...saidas].sort((a, b) => {
+      const aDate = a.date.includes('T') ? a.date : `${a.date}T00:00:00.000Z`;
+      const bDate = b.date.includes('T') ? b.date : `${b.date}T00:00:00.000Z`;
+      return bDate.localeCompare(aDate);
+    });
+  }, [approvedPayments, filteredExpenses]);
+
+  const saldo = totalEntradas - totalSaidas;
   const isNegative = saldo < 0;
 
   return (
@@ -43,8 +76,8 @@ export function TransparenciaView() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-800">Transparência</h2>
         <div className="relative">
-          <select 
-            value={period} 
+          <select
+            value={period}
             onChange={e => setPeriod(e.target.value)}
             className="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2 pl-4 pr-8 rounded-full text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
           >
@@ -69,43 +102,51 @@ export function TransparenciaView() {
         <div className="bg-black/10 rounded-xl p-3 flex justify-between text-sm">
           <div>
             <span className={`block text-xs text-opacity-80 ${isNegative ? 'text-gray-400' : 'text-emerald-100'}`}>Entradas</span>
-            <span className="font-medium">+ R$ {filteredPayments.filter(p => p.status === 'approved').reduce((a,b)=>a+b.amount,0).toFixed(2)}</span>
+            <span className="font-medium">+ R$ {totalEntradas.toFixed(2)}</span>
           </div>
           <div className="text-right">
             <span className={`block text-xs text-opacity-80 ${isNegative ? 'text-gray-400' : 'text-emerald-100'}`}>Saídas</span>
-            <span className="font-medium">- R$ {filteredExpenses.reduce((a,b)=>a+b.amount,0).toFixed(2)}</span>
+            <span className="font-medium">- R$ {totalSaidas.toFixed(2)}</span>
           </div>
         </div>
       </div>
 
       <h3 className="font-semibold text-gray-800 text-lg mb-4 flex items-center">
-        <Receipt className="mr-2 text-gray-400" size={20} /> Histórico de Gastos
+        <Receipt className="mr-2 text-gray-400" size={20} /> Histórico do Caixa
       </h3>
 
       <div className="space-y-4">
-        {filteredExpenses.length === 0 ? (
+        {ledger.length === 0 ? (
           <div className="text-center text-gray-400 text-sm py-8 bg-white rounded-3xl border border-gray-100">
-            Nenhum gasto registrado neste período.
+            Nenhum lançamento confirmado neste período.
           </div>
         ) : (
-          filteredExpenses.map((expense) => (
-            <div key={expense.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-medium text-gray-800">{expense.title}</h4>
-                  <span className="text-xs text-gray-400">
-                    {format(parseISO(expense.date), 'dd MMM, yyyy', { locale: ptBR })} • {expense.category}
-                  </span>
+          ledger.map((item) => (
+            <div key={item.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex justify-between items-start gap-3 mb-3">
+                <div className="flex gap-3 min-w-0">
+                  <div className={`mt-0.5 ${item.kind === 'entrada' ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {item.kind === 'entrada' ? <ArrowUpCircle size={18} /> : <ArrowDownCircle size={18} />}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-medium text-gray-800 truncate">{item.title}</h4>
+                    <span className="text-xs text-gray-400">
+                      {format(parseISO(item.date.includes('T') ? item.date : `${item.date}T00:00:00`), 'dd MMM, yyyy', { locale: ptBR })}
+                      {item.subtitle ? ` - ${item.subtitle}` : ''}
+                    </span>
+                  </div>
                 </div>
-                <span className="font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-lg text-sm">
-                  - R$ {expense.amount.toFixed(2)}
+                <span className={`font-semibold px-2 py-1 rounded-lg text-sm whitespace-nowrap ${
+                  item.kind === 'entrada' ? 'text-emerald-700 bg-emerald-50' : 'text-red-600 bg-red-50'
+                }`}>
+                  {item.kind === 'entrada' ? '+' : '-'} R$ {item.amount.toFixed(2)}
                 </span>
               </div>
-              
-              {expense.receiptUrl && (
+
+              {item.proofUrl && (
                 <div className="mt-4 border-t border-gray-100 pt-3">
-                  <span 
-                    onClick={() => setFullscreenImage({url: expense.receiptUrl!, title: `Comprovante: ${expense.title}`})}
+                  <span
+                    onClick={() => setFullscreenImage({url: item.proofUrl!, title: `Comprovante: ${item.title}`})}
                     className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg font-medium cursor-pointer inline-flex items-center active:scale-95 transition-all"
                   >
                     Ver Comprovante

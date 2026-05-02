@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, addNotification, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
 import { Payment, UserProfile, AppEvent } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 
@@ -87,6 +87,7 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
 export function AdminPanel() {
   const { allPayments, allUsers, appConfig } = useApp();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
+  const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
   return (
     <div className="p-6 max-w-lg mx-auto pb-24 space-y-6">
@@ -803,24 +804,8 @@ function CommsForm() {
         createdBy: user?.uid || ''
       });
       
-      if ((type === 'event' && notifyNow) || type === 'announcement') {
-        const workerUrl = (import.meta as any).env.VITE_WORKER_URL;
-        if (workerUrl && eventId) {
-          // Chama o worker para postar a notificação no DB e disparar via Push Nativo (FCM)
-          await fetch(`${workerUrl.replace(/\/$/, '')}/notify-now`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ eventId })
-          });
-        } else {
-          // Fallback caso não tenha Worker configurado: apenas adiciona no mural do app
-          await addNotification({
-            userId: 'all',
-            title: type === 'event' ? `Novo Evento: ${title}` : `Novo Aviso: ${title}`,
-            message: desc
-          });
-        }
-      }
+      // O Worker unificado cria a notificação e dispara Web Push quando notifyNow=true.
+      void eventId;
 
       alert('Publicado!');
       setTitle('');

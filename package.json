@@ -1,26 +1,30 @@
 {
-  "name": "react-example",
+  "name": "caixinha-pet-place",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev:worker": "wrangler dev",
     "build": "vite build",
+    "deploy": "npm run deploy:prod",
+    "deploy:prod": "npm run build && wrangler deploy --env production && npm run pages:prod",
+    "deploy:dev": "npm run build && wrangler deploy --env dev && npm run pages:dev",
+    "cf:migrate": "npm run cf:migrate:prod",
+    "cf:migrate:prod": "wrangler d1 migrations apply DB --env production --remote",
+    "cf:migrate:dev": "wrangler d1 migrations apply DB --env dev --remote",
+    "pages:prod": "wrangler pages deploy pages-proxy --project-name pet-place --branch main",
+    "pages:dev": "wrangler pages deploy pages-proxy-dev --project-name pet-place-dev --branch dev",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "firebase": "^12.12.1",
-    "jszip": "^3.10.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -29,14 +33,14 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2",
-    "@types/express": "^4.17.21",
+    "@cloudflare/workers-types": "^4.20260430.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^10.3.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "wrangler": "^4.87.0"
   }
 }
