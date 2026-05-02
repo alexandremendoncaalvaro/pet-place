@@ -106,7 +106,9 @@ export function MainApp() {
           </button>
           <div className="flex flex-col">
             <h1 className="font-semibold text-gray-800 leading-tight">Olá, {user.name.split(' ')[0]}</h1>
-            <span className="text-xs text-gray-400 capitalize">{user.role}</span>
+            {user.role === 'admin' && (
+              <span className="text-xs text-gray-400">Admin</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1">
