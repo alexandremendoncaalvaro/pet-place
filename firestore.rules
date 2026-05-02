@@ -1,0 +1,230 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && request.auth.token.email == 'peritto@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function hasAllKeys(data, keys) {
+      return data.keys().hasAll(keys) && data.keys().size() == keys.size();
+    }
+
+    function isValidUser(data) {
+      return hasAllKeys(data, ['uid', 'name', 'phone', 'dogName', 'photoUrl', 'role', 'email', 'createdAt'])
+        && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100
+        && data.name is string && data.name.size() <= 100
+        && data.phone is string && data.phone.size() <= 20
+        && data.dogName is string && data.dogName.size() <= 100
+        && data.photoUrl is string && data.photoUrl.size() <= 1000
+        && data.role is string && data.role in ['admin', 'resident']
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Allow users to create their own profile. Only bootstrapped admin can create an admin profile directly, others must create as resident.
+      allow create: if isOwner(userId) && isValidId(userId)
+                    && isValidUser(incoming())
+                    && incoming().uid == request.auth.uid
+                    && incoming().email == request.auth.token.email
+                    && (incoming().role == 'resident' || isBootstrappedAdmin());
+      
+      allow update: if isOwner(userId) && isValidId(userId)
+                    && isValidUser(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'dogName'])
+                    && incoming().uid == existing().uid
+                    && incoming().email == existing().email
+                    && incoming().role == existing().role
+                    && incoming().createdAt == existing().createdAt
+                    || (isAdmin() && isValidUser(incoming()));
+    }
+
+    function isValidPayment(data) {
+      return hasAllKeys(data, ['userId', 'month', 'amount', 'proofUrl', 'status', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() > 0 && data.userId.size() <= 100
+        && data.month is string && data.month.size() > 0 && data.month.size() <= 20
+        && data.amount is number && data.amount >= 0
+        && data.proofUrl is string && data.proofUrl.size() <= 1000
+        && data.status is string && data.status in ['pending', 'analyzing', 'approved', 'rejected']
+        && data.createdAt is string && data.createdAt.size() > 0
+        && data.updatedAt is string && data.updatedAt.size() > 0;
+    }
+
+    match /payments/{paymentId} {
+      // Residents can read their own payments. Admins can read all.
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Residents can create payments.
+      allow create: if isSignedIn() && isValidId(paymentId)
+                    && isValidPayment(incoming())
+                    && incoming().userId == request.auth.uid
+                    && (incoming().status == 'pending' || incoming().status == 'analyzing');
+
+      // Residents can update their own payment to attach proof ('analyzing' status).
+      // Admins can approve/reject.
+      allow update: if isSignedIn() && isValidId(paymentId)
+                    && isValidPayment(incoming())
+                    && incoming().userId == existing().userId
+                    && incoming().month == existing().month
+                    && incoming().createdAt == existing().createdAt
+                    && (
+                      (
+                        incoming().userId == request.auth.uid
+                        && existing().status in ['pending', 'rejected']
+                        && incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'proofUrl', 'status', 'updatedAt'])
+                        && incoming().status == 'analyzing'
+                      )
+                      ||
+                      (
+                        isAdmin()
+                        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                      )
+                    );
+    }
+
+    function isValidExpense(data) {
+      return hasAllKeys(data, ['date', 'title', 'category', 'amount', 'receiptUrl', 'createdBy', 'createdAt'])
+        && data.date is string && data.date.size() > 0 && data.date.size() <= 20
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.category is string && data.category.size() > 0 && data.category.size() <= 100
+        && data.amount is number && data.amount >= 0
+        && data.receiptUrl is string && data.receiptUrl.size() <= 1000
+        && data.createdBy is string && data.createdBy.size() > 0 && data.createdBy.size() <= 100
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /expenses/{expenseId} {
+      // Transparência: Todos os moradores logados podem ler as despesas.
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin() && isValidId(expenseId)
+                    && isValidExpense(incoming())
+                    && incoming().createdBy == request.auth.uid;
+
+      allow update: if isAdmin() && isValidId(expenseId)
+                    && isValidExpense(incoming())
+                    && incoming().createdBy == existing().createdBy
+                    && incoming().createdAt == existing().createdAt;
+      
+      allow delete: if isAdmin() && isValidId(expenseId);
+    }
+
+    function isValidAppConfig(data) {
+      return hasAllKeys(data, ['pixKey', 'monthlyAmount', 'dueDateDay', 'paymentInstructions', 'updatedAt'])
+        && data.pixKey is string && data.pixKey.size() <= 100
+        && data.monthlyAmount is number && data.monthlyAmount >= 0
+        && data.dueDateDay is number && data.dueDateDay >= 1 && data.dueDateDay <= 31
+        && data.paymentInstructions is string && data.paymentInstructions.size() <= 2000
+        && data.updatedAt is string && data.updatedAt.size() > 0;
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(settingId)
+                    && isValidAppConfig(incoming());
+      allow update: if isAdmin() && isValidId(settingId)
+                    && isValidAppConfig(incoming());
+    }
+
+    function isValidPet(data) {
+      return hasAllKeys(data, ['ownerId', 'name', 'photoUrl', 'breed', 'createdAt'])
+        && data.ownerId is string && data.ownerId.size() > 0 && data.ownerId.size() <= 100
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.photoUrl is string && data.photoUrl.size() <= 1000
+        && data.breed is string && data.breed.size() <= 100
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /pets/{petId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(petId)
+                    && isValidPet(incoming())
+                    && incoming().ownerId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(petId)
+                    && isValidPet(incoming())
+                    && incoming().ownerId == existing().ownerId
+                    && incoming().createdAt == existing().createdAt
+                    && (incoming().ownerId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(petId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    function isValidEventConfig(data) {
+      return hasAllKeys(data, ['title', 'description', 'date', 'time', 'type', 'createdBy', 'createdAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 2000
+        && data.date is string && data.date.size() <= 20
+        && data.time is string && data.time.size() <= 20
+        && data.type is string && data.type in ['event', 'announcement']
+        && data.createdBy is string && data.createdBy.size() > 0 && data.createdBy.size() <= 100
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(eventId)
+                    && isValidEventConfig(incoming())
+                    && incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() && isValidId(eventId)
+                    && isValidEventConfig(incoming())
+                    && incoming().createdBy == existing().createdBy
+                    && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(eventId);
+    }
+
+    function isValidNotification(data) {
+      return hasAllKeys(data, ['userId', 'title', 'message', 'isRead', 'createdAt'])
+        && data.userId is string && data.userId.size() > 0 && data.userId.size() <= 100
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.message is string && data.message.size() <= 1000
+        && data.isRead is bool
+        && data.createdAt is string && data.createdAt.size() > 0;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() && isValidId(notificationId) && isValidNotification(incoming());
+      // we allow user to update isRead
+      allow update: if isSignedIn() && isValidId(notificationId)
+                    && isValidNotification(incoming())
+                    && incoming().userId == existing().userId
+                    && incoming().title == existing().title
+                    && incoming().message == existing().message
+                    && incoming().createdAt == existing().createdAt
+                    && (
+                      (incoming().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']))
+                      || isAdmin()
+                    );
+      allow delete: if isAdmin() && isValidId(notificationId);
+    }
+  }
+}
