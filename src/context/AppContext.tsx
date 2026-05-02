@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
-import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
+import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost, IdentityLinkSuggestion } from '../lib/types';
 import { 
   initBackend, 
   subscribeToAuth, 
@@ -16,6 +16,7 @@ import {
   subscribeToAllEvents,
   subscribeToMyNotifications,
   subscribeToAllPosts,
+  subscribeToIdentityLinkSuggestions,
   isRealBackend,
   setMockRole,
   requestPushToken
@@ -36,6 +37,7 @@ interface AppState {
   events: AppEvent[];
   myNotifications: AppNotification[];
   posts: AppPost[];
+  identityLinkSuggestions: IdentityLinkSuggestion[];
   loadMorePosts: () => void;
   postLimit: number;
   login: () => Promise<void>;
@@ -73,6 +75,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
   const [posts, setPosts] = useState<AppPost[]>([]);
+  const [identityLinkSuggestions, setIdentityLinkSuggestions] = useState<IdentityLinkSuggestion[]>([]);
   const [postLimit, setPostLimit] = useState(10);
   const ensuredPaymentsRef = useRef<Set<string>>(new Set());
   const pushRequestedRef = useRef<Set<string>>(new Set());
@@ -121,6 +124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setEvents([]);
       setMyNotifications([]);
       setPosts([]);
+      setIdentityLinkSuggestions([]);
       return;
     }
 
@@ -138,6 +142,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (user.role === 'admin') {
       unsubs.push(subscribeToAllUsers(setAllUsers));
+      unsubs.push(subscribeToIdentityLinkSuggestions(setIdentityLinkSuggestions));
     }
 
     const currentMonth = new Date().toISOString().slice(0, 7);
@@ -194,6 +199,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       events,
       myNotifications,
       posts,
+      identityLinkSuggestions,
       loadMorePosts,
       postLimit,
       login: handleLogin,

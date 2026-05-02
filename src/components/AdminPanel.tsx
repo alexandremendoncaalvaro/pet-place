@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
-import { Payment, UserProfile, AppEvent } from '../lib/types';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup, createOfflineUser, createManualPayment, resolveIdentityLinkSuggestion } from '../services/api';
+import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 import { AdminFeedbackProvider, useAdminFeedback } from './AdminFeedback';
@@ -96,7 +96,7 @@ export function AdminPanel() {
 }
 
 function AdminPanelContent() {
-  const { allPayments, allUsers, appConfig } = useApp();
+  const { allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
   const { confirm, toast } = useAdminFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
@@ -185,6 +185,8 @@ function AdminPanelContent() {
 
       {tab === 'users' && (
         <div className="space-y-4">
+          <ManualPaymentForm allUsers={allUsers} />
+          <IdentityLinkSuggestionsPanel suggestions={identityLinkSuggestions} />
           <h3 className="font-semibold text-gray-800 text-lg mb-2">Pessoas ({allUsers.length})</h3>
           {allUsers.map(u => (
             <div key={u.uid} className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col gap-3 shadow-sm">
@@ -281,6 +283,147 @@ function AdminPanelContent() {
 
       {tab === 'settings' && <SettingsForm />}
 
+    </div>
+  );
+}
+
+function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
+  const { toast } = useAdminFeedback();
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [dogName, setDogName] = useState('');
+  const [amount, setAmount] = useState('25');
+  const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [type, setType] = useState<NonNullable<Payment['type']>>('mensalidade');
+  const [description, setDescription] = useState('Comprovante recebido pelo WhatsApp');
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const activeUsers = allUsers.filter((user) => user.userStatus !== 'blocked');
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!file) {
+      toast('Anexe o comprovante recebido.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      let familyId = selectedUserId;
+      if (!familyId) {
+        const offlineUser = await createOfflineUser({ name, phone: normalizePhoneBR(phone), dogName });
+        familyId = offlineUser.uid;
+      }
+      await createManualPayment({
+        familyId,
+        amount: Number(amount || 0),
+        month,
+        type,
+        description,
+      }, file);
+      toast('Pessoa e comprovante registrados no caixa.');
+      setName('');
+      setPhone('');
+      setDogName('');
+      setAmount('25');
+      setDescription('Comprovante recebido pelo WhatsApp');
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = '';
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao registrar comprovante.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-5 border border-blue-100 shadow-sm space-y-4">
+      <div>
+        <h3 className="font-semibold text-gray-800 text-lg">Registrar pagamento externo</h3>
+        <p className="text-xs text-gray-500 mt-1">Use para comprovantes enviados pelo WhatsApp, sem obrigar a pessoa a entrar no app.</p>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Pessoa existente</label>
+        <select
+          value={selectedUserId}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+          className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
+        >
+          <option value="">Cadastrar nova pessoa offline</option>
+          {activeUsers.map((user) => (
+            <option key={user.uid} value={user.familyId || user.uid}>{user.name} {user.isOffline ? '(offline)' : ''}</option>
+          ))}
+        </select>
+      </div>
+
+      {!selectedUserId && (
+        <div className="grid grid-cols-1 gap-3">
+          <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome da pessoa" className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+          <input required value={phone} onChange={(event) => setPhone(formatPhoneBR(event.target.value))} placeholder={PHONE_BR_PLACEHOLDER} inputMode="tel" autoComplete="tel-national" maxLength={15} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+          <input value={dogName} onChange={(event) => setDogName(event.target.value)} placeholder="Nome do pet (opcional)" className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <input required type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+        <input required type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+      </div>
+
+      <select value={type} onChange={(event) => setType(event.target.value as NonNullable<Payment['type']>)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm">
+        <option value="mensalidade">Mensalidade</option>
+        <option value="doacao">Doação</option>
+        <option value="rateio">Rateio</option>
+      </select>
+
+      <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+
+      <button type="button" onClick={() => fileRef.current?.click()} className="w-full bg-blue-50 text-blue-600 py-3 rounded-2xl font-medium flex items-center justify-center active:bg-blue-100">
+        <Receipt size={18} className="mr-2" /> {file ? file.name : 'Anexar comprovante'}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+
+      <button disabled={loading} type="submit" className="w-full bg-gray-900 active:bg-black text-white py-3.5 rounded-2xl font-medium flex items-center justify-center disabled:opacity-50">
+        {loading ? <Loader2 size={18} className="animate-spin" /> : <><Plus size={18} className="mr-2" /> Registrar no caixa</>}
+      </button>
+    </form>
+  );
+}
+
+function IdentityLinkSuggestionsPanel({ suggestions }: { suggestions: IdentityLinkSuggestion[] }) {
+  const { toast } = useAdminFeedback();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const pending = suggestions.filter((suggestion) => suggestion.status === 'pending');
+  if (!pending.length) return null;
+
+  const resolve = async (id: string, status: 'approved' | 'rejected') => {
+    setLoadingId(id);
+    try {
+      await resolveIdentityLinkSuggestion(id, status);
+      toast(status === 'approved' ? 'Vínculo aprovado e dados reunidos.' : 'Sugestão recusada.');
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao resolver vínculo.', 'error');
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  return (
+    <div className="bg-amber-50 rounded-3xl p-5 border border-amber-100 space-y-3">
+      <h3 className="font-semibold text-amber-900 text-sm">Sugestões de vínculo por telefone</h3>
+      {pending.map((suggestion) => (
+        <div key={suggestion.id} className="bg-white rounded-2xl p-3 border border-amber-100">
+          <p className="text-sm text-gray-800">
+            <strong>{suggestion.sourceName}</strong> parece ser <strong>{suggestion.targetName}</strong>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Telefone: {formatPhoneBR(suggestion.phone)}</p>
+          <div className="flex gap-2 mt-3">
+            <button disabled={loadingId === suggestion.id} onClick={() => resolve(suggestion.id, 'rejected')} className="flex-1 text-xs bg-gray-100 text-gray-600 py-2 rounded-xl disabled:opacity-50">Recusar</button>
+            <button disabled={loadingId === suggestion.id} onClick={() => resolve(suggestion.id, 'approved')} className="flex-1 text-xs bg-emerald-600 text-white py-2 rounded-xl disabled:opacity-50">Juntar dados</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

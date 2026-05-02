@@ -1,4 +1,4 @@
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
 import { API_BASE, api, toApiError } from './http';
 import { notifyDataChanged, subscribe } from './subscriptions';
 import { compressImage } from './uploads';
@@ -74,6 +74,10 @@ export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
   return subscribe(async () => (await api<{ users: UserProfile[] }>('/users')).users, callback);
 }
 
+export function subscribeToIdentityLinkSuggestions(callback: (suggestions: IdentityLinkSuggestion[]) => void) {
+  return subscribe(async () => (await api<{ suggestions: IdentityLinkSuggestion[] }>('/identity-link-suggestions')).suggestions, callback);
+}
+
 export function subscribeToConfig(callback: (config: AppConfig | null) => void) {
   return subscribe(async () => (await api<{ config: AppConfig | null }>('/config')).config, callback);
 }
@@ -84,6 +88,35 @@ export async function submitDonation(amount: number, file: File, familyId: strin
   form.set('familyId', familyId);
   form.set('file', file);
   await api('/payments/donation', { method: 'POST', body: form });
+  notifyDataChanged();
+}
+
+export async function createOfflineUser(data: { name: string; phone: string; dogName?: string }) {
+  const res = await api<{ user: UserProfile }>('/users/offline', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  notifyDataChanged();
+  return res.user;
+}
+
+export async function createManualPayment(data: { familyId: string; amount: number; month: string; type: NonNullable<Payment['type']>; description?: string }, file: File) {
+  const form = new FormData();
+  form.set('familyId', data.familyId);
+  form.set('amount', String(data.amount));
+  form.set('month', data.month);
+  form.set('type', data.type);
+  form.set('description', data.description || '');
+  form.set('file', file);
+  await api('/payments/manual', { method: 'POST', body: form });
+  notifyDataChanged();
+}
+
+export async function resolveIdentityLinkSuggestion(suggestionId: string, status: 'approved' | 'rejected') {
+  await api(`/identity-link-suggestions/${encodeURIComponent(suggestionId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
   notifyDataChanged();
 }
 
