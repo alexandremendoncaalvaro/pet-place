@@ -47,10 +47,10 @@ Os workflows precisam rodar, nessa ordem:
 
 Achados atuais:
 
-- `worker/index.ts` esta grande demais. Aceitavel no curto prazo, mas novas features devem nascer em helpers ou modulos pequenos antes de aumentar esse arquivo.
-- `src/services/api.ts` concentra transporte, polling, uploads, push e normalizacao. Manter simples por enquanto, mas extrair quando uma area passar a ter regra propria.
+- `worker/index.ts` ainda concentra handlers, mas o roteamento de API ja foi separado por dominio (`routePaymentsApi`, `routeUsersApi`, `routePostsApi`, etc.). O proximo passo, quando houver nova feature grande, e mover handlers por dominio.
+- `src/services/api.ts` agora funciona como fachada publica. HTTP, polling, uploads e push ficam em modulos dedicados dentro de `src/services/`.
 - `AdminPanel.tsx` e o maior componente de UI. Novas telas administrativas devem virar componentes proprios.
-- Alteracoes administrativas destrutivas ou sensiveis precisam de confirmacao explicita ou fluxo de aprovacao. Troca de papel admin/resident ja exige confirmacao; exclusao/restauracao ainda deve migrar para um modal padronizado.
+- Alteracoes administrativas destrutivas ou sensiveis precisam de confirmacao explicita ou fluxo de aprovacao. O painel admin usa `AdminFeedbackProvider` para confirmacoes e toasts em vez de `alert()`/`confirm()` nativos.
 - Regras financeiras nao devem ficar embutidas em componentes. O calculo de caixa agora mora em `src/lib/finance.ts` e tem teste unitario.
 - Permissoes de UI devem sair do contexto tipado, nao de flags soltas em componentes. `isAdmin` faz parte do `AppContext`.
 - Telefone sera a chave candidata para sugestao de vinculo futuro, mas nunca deve fazer merge automatico. O fluxo correto esta documentado em `docs/IDENTITY_LINKING.md`.
@@ -67,8 +67,8 @@ Achados atuais:
 
 ## Backlog Tecnico Priorizado
 
-1. Extrair rotas do Worker por dominio: auth, users, payments, expenses, posts, notifications e media.
+1. Mover handlers do Worker por dominio: auth, users, payments, expenses, posts, notifications e media.
 2. Criar testes de integracao do Worker com D1/R2 mockados para permissoes e mutacoes financeiras.
-3. Substituir `alert()`/`confirm()` espalhados por componentes pequenos de dialog/toast.
+3. Substituir confirmacoes inline antigas restantes por `AdminFeedbackProvider` quando novos paineis administrativos forem criados.
 4. Separar `src/services/api.ts` em cliente HTTP, subscriptions/polling, uploads e push.
 5. Adicionar E2E/smoke automatizado sem depender de conta real de usuario.
