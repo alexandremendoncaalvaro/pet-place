@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
 import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost } from '../lib/types';
 import { 
   initBackend, 
@@ -54,6 +54,7 @@ const AppContext = createContext<AppState | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendReady, setBackendReady] = useState(false);
   const [myPayments, setMyPayments] = useState<Payment[]>([]);
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
@@ -72,79 +73,92 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
   const [posts, setPosts] = useState<AppPost[]>([]);
   const [postLimit, setPostLimit] = useState(10);
+  const ensuredPaymentsRef = useRef<Set<string>>(new Set());
+  const pushRequestedRef = useRef<Set<string>>(new Set());
   
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [viewPetId, setViewPetId] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<{url: string, title?: string} | null>(null);
 
   useEffect(() => {
-    let unsubPosts: () => void;
+    let cancelled = false;
+    let unsubAuth: (() => void) | undefined;
+
     initBackend().then(() => {
-      unsubPosts = subscribeToAllPosts(postLimit, setPosts);
+      if (cancelled) return;
+      setBackendReady(true);
+      unsubAuth = subscribeToAuth((u) => {
+        if (cancelled) return;
+        setUser((current) => {
+          if (JSON.stringify(current) === JSON.stringify(u)) return current;
+          return u;
+        });
+        setLoading(false);
+      });
+    }).catch((error) => {
+      console.error(error);
+      if (!cancelled) setLoading(false);
     });
+
     return () => {
-      if (unsubPosts) unsubPosts();
+      cancelled = true;
+      if (unsubAuth) unsubAuth();
     };
-  }, [postLimit]);
+  }, []);
 
   const loadMorePosts = () => setPostLimit(prev => prev + 10);
 
   useEffect(() => {
-    let unsubAuth: () => void;
-    let unsubMyPayments: () => void;
-    let unsubAllPayments: () => void;
-    let unsubAllExpenses: () => void;
-    let unsubAllUsers: () => void;
-    let unsubPublicProfiles: () => void;
-    let unsubAllPets: () => void;
-    let unsubConfig: () => void;
-    let unsubEvents: () => void;
-    let unsubNotifs: () => void;
+    if (!backendReady || !user) {
+      setMyPayments([]);
+      setAllPayments([]);
+      setAllExpenses([]);
+      setAllUsers([]);
+      setPublicProfiles([]);
+      setAllPets([]);
+      setEvents([]);
+      setMyNotifications([]);
+      setPosts([]);
+      return;
+    }
 
-    initBackend().then(() => {
-      unsubConfig = subscribeToConfig(setAppConfig);
-      unsubEvents = subscribeToAllEvents(setEvents);
-      unsubAuth = subscribeToAuth((u) => {
-        setUser(u);
-        setLoading(false);
-        if (u) {
-          const fid = u.familyId || u.uid;
-          requestPushToken(u.uid);
-          ensureCurrentMonthPayment(fid); // This might use hardcoded 30 internally, we can fix later
-          unsubMyPayments = subscribeToMyPayments(fid, setMyPayments);
-          unsubNotifs = subscribeToMyNotifications(u.uid, u.role, setMyNotifications);
-          unsubAllExpenses = subscribeToAllExpenses(setAllExpenses);
-          unsubPublicProfiles = subscribeToAllPublicProfiles(setPublicProfiles);
-          unsubAllPets = subscribeToAllPets(setAllPets);
-          unsubAllPayments = subscribeToAllPayments(setAllPayments);
-          if (u.role === 'admin') {
-            unsubAllUsers = subscribeToAllUsers(setAllUsers);
-          }
-        } else {
-          setMyPayments([]);
-          setAllPayments([]);
-          setAllExpenses([]);
-          setAllUsers([]);
-          setPublicProfiles([]);
-          setAllPets([]);
-          setMyNotifications([]);
-        }
-      });
-    });
+    const familyId = user.familyId || user.uid;
+    const unsubs = [
+      subscribeToConfig(setAppConfig),
+      subscribeToAllEvents(setEvents),
+      subscribeToMyPayments(familyId, setMyPayments),
+      subscribeToMyNotifications(user.uid, user.role, setMyNotifications),
+      subscribeToAllExpenses(setAllExpenses),
+      subscribeToAllPublicProfiles(setPublicProfiles),
+      subscribeToAllPets(setAllPets),
+      subscribeToAllPayments(setAllPayments),
+    ];
+
+    if (user.role === 'admin') {
+      unsubs.push(subscribeToAllUsers(setAllUsers));
+    }
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const ensureKey = `${familyId}:${currentMonth}`;
+    if (!ensuredPaymentsRef.current.has(ensureKey)) {
+      ensuredPaymentsRef.current.add(ensureKey);
+      ensureCurrentMonthPayment(familyId, false).catch((error) => console.error('Failed to ensure current payment:', error));
+    }
+
+    if (!pushRequestedRef.current.has(user.uid)) {
+      pushRequestedRef.current.add(user.uid);
+      requestPushToken(user.uid).catch((error) => console.error('Failed to register push subscription:', error));
+    }
 
     return () => {
-      if (unsubAuth) unsubAuth();
-      if (unsubMyPayments) unsubMyPayments();
-      if (unsubAllPayments) unsubAllPayments();
-      if (unsubAllExpenses) unsubAllExpenses();
-      if (unsubAllUsers) unsubAllUsers();
-      if (unsubPublicProfiles) unsubPublicProfiles();
-      if (unsubAllPets) unsubAllPets();
-      if (unsubConfig) unsubConfig();
-      if (unsubEvents) unsubEvents();
-      if (unsubNotifs) unsubNotifs();
+      unsubs.forEach((unsubscribe) => unsubscribe());
     };
-  }, []);
+  }, [backendReady, user?.uid, user?.familyId, user?.role]);
+
+  useEffect(() => {
+    if (!backendReady || !user) return;
+    return subscribeToAllPosts(postLimit, setPosts);
+  }, [backendReady, user?.uid, postLimit]);
 
   const handleLogin = async () => {
     try { await loginWithGoogle(); } catch(e) { console.error(e); }

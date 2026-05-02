@@ -39,11 +39,13 @@ export function subscribeToAuth(callback: (user: UserProfile | null) => void) {
       if (error.status === 401 || error.status === 403) return null;
       throw error;
     }
-  }, callback, 30000);
+  }, callback, 60000);
 }
 
 export async function requestPushToken(_userId: string) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  await unregisterLegacyServiceWorkers();
+
   const permission = await window.Notification.requestPermission();
   if (permission !== 'granted') return;
 
@@ -62,12 +64,26 @@ export async function requestPushToken(_userId: string) {
   });
 }
 
-export async function ensureCurrentMonthPayment(familyId: string) {
+async function unregisterLegacyServiceWorkers() {
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations
+      .filter((registration) => {
+        const scriptUrl = registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || '';
+        return scriptUrl.includes('firebase-messaging-sw.js');
+      })
+      .map((registration) => registration.unregister()));
+  } catch (error) {
+    console.warn('Legacy service worker cleanup failed:', error);
+  }
+}
+
+export async function ensureCurrentMonthPayment(familyId: string, notify = true) {
   await api('/payments/ensure-current-month', {
     method: 'POST',
     body: JSON.stringify({ familyId }),
   });
-  notifyDataChanged();
+  if (notify) notifyDataChanged();
 }
 
 export function subscribeToMyPayments(familyId: string, callback: (payments: Payment[]) => void) {
@@ -216,7 +232,7 @@ export async function markEventAsRead(eventId: string, _userId: string) {
 }
 
 export function subscribeToMyNotifications(_userId: string, _role: string, callback: (n: AppNotification[]) => void) {
-  return subscribe(async () => (await api<{ notifications: AppNotification[] }>('/notifications')).notifications, callback, 15000);
+  return subscribe(async () => (await api<{ notifications: AppNotification[] }>('/notifications')).notifications, callback, 30000);
 }
 
 export async function markNotificationAsRead(notificationId: string) {
@@ -233,7 +249,7 @@ export async function addNotification(data: Omit<AppNotification, 'id' | 'create
 }
 
 export function subscribeToAllPosts(limitAmount: number, callback: (posts: AppPost[]) => void) {
-  return subscribe(async () => (await api<{ posts: AppPost[] }>(`/posts?limit=${limitAmount}`)).posts, callback, 15000);
+  return subscribe(async () => (await api<{ posts: AppPost[] }>(`/posts?limit=${limitAmount}`)).posts, callback, 30000);
 }
 
 export async function addPost(data: Omit<AppPost, 'id' | 'createdAt' | 'likedBy'>, mediaFile?: File) {
@@ -262,7 +278,7 @@ export async function updatePost(postId: string, content: string, tags: string[]
 }
 
 export function subscribeToComments(postId: string, callback: (comments: any[]) => void) {
-  return subscribe(async () => (await api<{ comments: any[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 10000);
+  return subscribe(async () => (await api<{ comments: any[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 30000);
 }
 
 export async function addComment(postId: string, authorId: string, content: string) {
@@ -331,7 +347,7 @@ async function toApiError(res: Response) {
   return error;
 }
 
-function subscribe<T>(loader: () => Promise<T>, callback: (value: T) => void, intervalMs = 30000) {
+function subscribe<T>(loader: () => Promise<T>, callback: (value: T) => void, intervalMs = 60000) {
   let stopped = false;
   let loading = false;
   const load = async () => {
