@@ -41,6 +41,7 @@ Os workflows precisam rodar, nessa ordem:
 - `npm run security:secrets`
 - `npm run lint`
 - `npm test`
+- `npm run test:e2e`
 - `npm run build`
 - migrations D1 remotas, apenas nos deploys
 - deploy Worker
@@ -68,14 +69,15 @@ Pontos de evolução:
 
 - `AdminPanel.tsx` é grande. Novas telas administrativas devem nascer em componentes próprios.
 - `worker/index.ts` ainda concentra handlers. Nova feature grande deve mover handlers para arquivos por domínio.
-- E2E completo com login simulado ainda é backlog; hoje há unit tests, build/typecheck e smoke pós-deploy.
+- E2E funcional de navegador usa Playwright com fixtures determinísticas de API.
+- E2E ponta a ponta contra D1/R2 reais ainda depende de autenticação de teste segura para ambiente dev/test.
 
 ## Plano de Testes Recomendado
 
 - Unitário: formatação/normalização, cálculo de caixa, filtro por mês, rateio por família.
 - Integração Worker: auth mockada, permissões admin/usuário, pagamentos, despesas, upload de mídia e backup.
 - Importação de dados: fixtures com usuários, família, comprovante ausente, mídia inválida e pagamentos duplicados.
-- E2E: login, mural, comprovante, transparência, painel admin e upload de recibo.
+- E2E: home, mural, comentários, curtidas, comprovante, transparência, perfil, comunidade e painel admin.
 - Smoke pós-deploy: `/api/health`, assets, D1 bindings e Pages proxy por Service Binding.
 
 ## Backlog Técnico Priorizado
@@ -83,4 +85,4 @@ Pontos de evolução:
 1. Criar testes de integração do Worker com D1/R2 mockados para permissões e mutações financeiras.
 2. Mover handlers do Worker por domínio: auth, users, payments, expenses, posts, notifications e media.
 3. Quebrar `AdminPanel.tsx` em componentes por aba quando houver nova demanda administrativa.
-4. Adicionar E2E/smoke automatizado sem depender de conta real de usuário.
+4. Adicionar E2E ponta a ponta contra D1/R2 dev sem depender de conta real de usuário.

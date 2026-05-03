@@ -394,8 +394,9 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
           <input
             id="post-media-input"
+            data-testid="post-media-input"
             type="file"
-            accept="image/*,video/*,.mp4"
+            accept="image/*,video/*,.mp4,.mov,.m4v"
             className="absolute h-px w-px overflow-hidden whitespace-nowrap border-0 p-0 opacity-0"
             onChange={e => {
               const file = e.target.files?.[0];

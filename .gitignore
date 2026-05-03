@@ -14,3 +14,6 @@ __pycache__/
 tools/migrate/.venv/
 .migration/
 migration-export/
+playwright-report/
+test-results/
+docs/tutorials/generated/

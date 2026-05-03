@@ -129,7 +129,7 @@ describe('project architecture guardrails', () => {
     expect(uploads).toContain("'video/quicktime'");
     expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
     expect(uploads).toContain('Video metadata validation skipped');
-    expect(createPostModal).toContain('accept="image/*,video/*,.mp4"');
+    expect(createPostModal).toContain('accept="image/*,video/*,.mp4,.mov,.m4v"');
     expect(createPostModal).toContain('htmlFor="post-media-input"');
     expect(createPostModal).toContain('controls');
     expect(createPostModal).toContain('poster={postVideoPosterUrl || undefined}');

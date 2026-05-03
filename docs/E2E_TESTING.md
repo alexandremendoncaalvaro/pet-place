@@ -1,0 +1,54 @@
+# Testes E2E e videos de tutorial
+
+O projeto usa Playwright para testes funcionais de navegador. A escolha segue o suporte atual do Playwright para auto-waiting, web-first assertions, traces e gravacao de video por teste.
+
+## Comandos
+
+```powershell
+npm run test:e2e
+npm run test:e2e:headed
+npm run test:e2e:tutorial
+```
+
+- `test:e2e`: roda a suite funcional em Chromium.
+- `test:e2e:headed`: abre o navegador para depuracao local.
+- `test:e2e:tutorial`: roda em viewport mobile e grava video de todos os testes.
+
+Por padrao, os videos brutos ficam em `test-results/` e nao entram no Git. Videos finais para tutorial devem ser revisados, comprimidos e salvos manualmente em `docs/tutorials/`.
+
+## Modelo adotado
+
+A primeira suite usa fixtures de API em `tests/e2e/support/`. Isso deixa o teste deterministico, independente de Google OAuth real e seguro para rodar localmente ou em CI.
+
+Esses testes cobrem a aplicacao como usuario, mas ainda nao substituem uma suite futura ponta a ponta contra D1/R2 reais. Para isso, o caminho recomendado e adicionar autenticacao de teste somente em ambiente `dev`/`test`, protegida por segredo e nunca habilitada em producao.
+
+## Caminhos felizes iniciais
+
+1. Home mostra mensalidade vigente e feed inicial.
+2. Detalhes da mensalidade exibem historico e comprovante em tela cheia.
+3. Extrato mostra entradas, saidas e historico do caixa.
+4. Mural lista notificacoes e eventos importantes.
+5. Comunidade permite buscar pessoas e pets.
+6. Perfil atualiza telefone no formato brasileiro.
+7. Nova publicacao aceita mencao digitada com arroba.
+8. Curtida atualiza contador da publicacao.
+9. Comentario aparece na thread da publicacao.
+10. Admin registra pagamento externo com comprovante.
+
+## Cenarios de erro para implementar depois
+
+- Usuario sem sessao ve a tela de login e nao acessa rotas autenticadas.
+- Usuario pendente ve bloqueio de aprovacao.
+- Usuario bloqueado nao acessa o app.
+- Upload de imagem acima do limite mostra erro claro.
+- Upload de video em formato nao aceito mostra erro claro.
+- Falha de rede ao postar mantem o modal aberto e mostra toast.
+- Falha ao anexar comprovante nao altera status do pagamento.
+- Admin tenta registrar pagamento externo sem comprovante e recebe validacao.
+- Usuario comum nao ve aba Admin.
+- Usuario comum nao aprova, rejeita ou exclui pagamentos.
+- Merge de cadastro falha no backend e preserva os dois cadastros.
+- Comentario vazio nao e enviado.
+- Marcacao sem resultado mostra estado vazio sem quebrar o editor.
+- Extrato sem lancamentos mostra estado vazio.
+- Realtime indisponivel nao trava a navegacao nem multiplica polling.

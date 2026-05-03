@@ -1,0 +1,106 @@
+import { expect, test } from '@playwright/test';
+import { createPetPlaceState, installPetPlaceApiMock, PetPlaceE2EState } from './support/pet-place-fixture';
+
+let state: PetPlaceE2EState;
+
+test.beforeEach(async ({ page }) => {
+  state = createPetPlaceState();
+  await installPetPlaceApiMock(page, state);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /Olá, Alexandre/ })).toBeVisible();
+});
+
+test('01 - home mostra mensalidade vigente e feed inicial', async ({ page }) => {
+  await expect(page.getByText(/Mensalidade:/)).toBeVisible();
+  await expect(page.getByText(/Em dia/)).toBeVisible();
+  await expect(page.getByText(/Amora brincando/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Comentários da publicação' })).toContainText('2');
+});
+
+test('02 - detalhes da mensalidade exibem historico e comprovante em tela cheia', async ({ page }) => {
+  await page.getByRole('button', { name: /Detalhes/ }).click();
+  await expect(page.getByText(/Meus Pagamentos/)).toBeVisible();
+  await expect(page.getByText(/Historico|Histórico/)).toBeVisible();
+  await page.getByRole('button', { name: /Ver Comprovante/ }).first().click();
+  await expect(page.getByText(/Comprovante:/)).toBeVisible();
+});
+
+test('03 - extrato mostra entradas, saidas e historico do caixa', async ({ page }) => {
+  await page.getByText('Extrato').click();
+  await expect(page.getByText(/Transpar/)).toBeVisible();
+  await expect(page.getByText('Entradas')).toBeVisible();
+  await expect(page.getByText('+ R$ 50.00')).toBeVisible();
+  await expect(page.getByText('Saídas')).toBeVisible();
+  await expect(page.getByText('- R$ 150.00').first()).toBeVisible();
+  await expect(page.getByText(/Historico do Caixa|Histórico do Caixa/)).toBeVisible();
+});
+
+test('04 - mural lista notificacoes e eventos importantes', async ({ page }) => {
+  await page.getByText('Mural').click();
+  await expect(page.getByText(/Minhas Notifica/)).toBeVisible();
+  await expect(page.getByText(/Comentario no seu post|Comentário no seu post/)).toBeVisible();
+  await expect(page.getByText(/Eventos e Avisos/)).toBeVisible();
+  await expect(page.getByText(/Mutirao de limpeza|Mutirão de limpeza/)).toBeVisible();
+});
+
+test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
+  await page.getByText('Comunidade').click();
+  await page.getByPlaceholder('Buscar...').fill('Marielle');
+  await expect(page.getByText('Marielle Santos')).toBeVisible();
+  await page.getByPlaceholder('Buscar...').fill('Belinha');
+  await expect(page.getByText('Belinha')).toBeVisible();
+});
+
+test('06 - perfil atualiza telefone no formato brasileiro', async ({ page }) => {
+  await page.getByRole('button', { name: 'Meu Perfil' }).click();
+  await page.getByPlaceholder('(47) 99999-9999').fill('(47) 98888-7777');
+  await page.getByRole('button', { name: /Salvar Perfil/ }).click();
+  await expect(page.getByText(/Perfil atualizado/)).toBeVisible();
+  expect(state.user?.phone).toBe('47988887777');
+});
+
+test('07 - nova publicacao aceita mencao digitada com arroba', async ({ page }) => {
+  await page.getByRole('button', { name: /Nova publica/ }).click();
+  await page.getByPlaceholder(/O que/).fill('Oi @Ma');
+  const marielleSuggestion = page.getByRole('button').filter({ hasText: 'Marielle Santos' }).filter({ hasText: 'Pessoa' });
+  await expect(marielleSuggestion).toBeVisible();
+  await marielleSuggestion.click();
+  await page.getByPlaceholder(/O que/).fill('Oi @Marielle Santos, bem-vinda ao Pet Place');
+  await page.getByRole('button', { name: 'Postar' }).click();
+  await expect(page.getByText(/bem-vinda ao Pet Place/)).toBeVisible();
+});
+
+test('08 - curtida atualiza o contador da publicacao', async ({ page }) => {
+  const likeButton = page.getByRole('button', { name: 'Curtir publicação' }).first();
+  await expect(likeButton).toContainText('1');
+  await likeButton.click();
+  await expect(page.getByRole('button', { name: 'Remover curtida' }).first()).toContainText('2');
+});
+
+test('09 - comentario aparece na thread da publicacao', async ({ page }) => {
+  await page.getByRole('button', { name: 'Comentários da publicação' }).first().click();
+  await expect(page.getByText(/Tambem vi|Também vi/)).toBeVisible();
+  await page.getByPlaceholder(/Adicionar um coment/).fill('Comentario automatizado pelo E2E');
+  await page.getByRole('button', { name: /Enviar comentario|Enviar comentário/ }).click();
+  await expect(page.getByText('Comentario automatizado pelo E2E')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Comentários da publicação' }).first()).toContainText('3');
+});
+
+test('10 - admin registra pagamento externo com comprovante', async ({ page }) => {
+  await page.getByRole('button', { name: 'Admin' }).click();
+  await page.getByRole('button', { name: /Pessoas/ }).click();
+  await page.getByRole('button', { name: /Pagamento externo/ }).click();
+  await page.getByPlaceholder('Nome da pessoa').fill('Carla Martins');
+  await page.getByPlaceholder('(47) 99999-9999').fill('(47) 95555-4444');
+  await page.getByPlaceholder('Nome do pet (opcional)').fill('Luna');
+  await page.locator('input[type="month"]').fill('2026-05');
+  await page.locator('input[type="number"]').first().fill('25');
+  await page.getByTestId('manual-payment-proof-input').setInputFiles({
+    name: 'comprovante.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('fake-image'),
+  });
+  await page.getByRole('button', { name: /Registrar no caixa/ }).click();
+  await expect(page.getByText(/Pessoa e comprovante registrados/)).toBeVisible();
+  expect(state.payments.some((payment) => payment.familyId.startsWith('offline-') && payment.amount === 25)).toBe(true);
+});

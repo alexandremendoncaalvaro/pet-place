@@ -48,6 +48,7 @@ Ambientes:
 - Cloudflare Pages
 - GitHub Actions
 - Vitest
+- Playwright
 - `mise` e `uv` para tooling local
 
 ## Design System
@@ -80,6 +81,15 @@ npm run quality
 ```
 
 O comando roda typecheck, testes unitários e build de produção.
+
+Testes E2E funcionais:
+
+```powershell
+npm run test:e2e
+npm run test:e2e:tutorial
+```
+
+Detalhes em [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
 
 ## Deploy
 
