@@ -51,6 +51,15 @@ describe('project architecture guardrails', () => {
     expect(subscriptions).toContain('matchesTopic');
   });
 
+  it('keeps the external payment form compact and mobile-first', () => {
+    const adminPanel = read('src/components/AdminPanel.tsx');
+
+    expect(adminPanel).toContain('aria-expanded={isOpen}');
+    expect(adminPanel).toContain('Valor recebido (R$)');
+    expect(adminPanel).toContain('grid grid-cols-1 gap-3 sm:grid-cols-2');
+    expect(adminPanel).not.toContain('grid grid-cols-2 gap-3');
+  });
+
   it('keeps post comment counts available before opening the comment drawer', () => {
     const worker = read('worker/index.ts');
     const postItem = read('src/components/PostItem.tsx');
