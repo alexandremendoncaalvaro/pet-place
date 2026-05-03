@@ -197,7 +197,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
           <input
             type="file"
-            accept="image/*,video/mp4,video/webm"
+            accept="image/*,video/mp4"
             className="hidden"
             ref={postFileInputRef}
             onChange={e => {

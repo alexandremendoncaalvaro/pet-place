@@ -21,13 +21,21 @@ Esse padrao evita perda de legibilidade em comprovantes bancarios, recibos e ane
 
 ## Videos do mural
 
-- Aceitar apenas MP4 e WebM no upload direto para R2.
+- Aceitar apenas MP4 no upload direto para R2.
 - Limitar videos a 60 segundos e 50MB.
 - Gerar uma capa WebP no cliente e salvar junto do post.
 - Servir videos com suporte a HTTP Range para permitir seek e carregamento progressivo.
-- Para MP4 convertido, usar H.264 Main, AAC-LC, `yuv420p`, `+faststart` e remover trilhas de dados/timecode.
+- Para MP4 convertido, usar H.264 Baseline 3.1, AAC-LC, `yuv420p`, `+faststart` e remover trilhas de dados/timecode.
+- Declarar o source como `video/mp4; codecs="avc1.42E01F, mp4a.40.2"` para alinhar com o alvo de compatibilidade.
 
-Arquivos MOV/QuickTime podem usar codecs que o navegador nao reproduz de forma consistente. Quando o projeto adotar Cloudflare Stream, esse fluxo pode passar a aceitar MOV porque o Stream faz transcodificacao e entrega adaptativa.
+Arquivos MOV/QuickTime, WebM e MP4 com codecs diferentes podem nao reproduzir de forma consistente em todos os celulares. Quando o projeto adotar Cloudflare Stream, esse fluxo pode passar a aceitar MOV/WebM porque o Stream faz transcodificacao e entrega adaptativa.
+
+Referencias usadas para este padrao:
+
+- Apple recomenda MP4 H.264 para arquivos estaticos no Safari.
+- A documentacao historica do iOS aponta H.264 Baseline 3.1 e audio AAC-LC/HE-AAC como alvo conservador.
+- MDN recomenda MP4 com AVC/H.264 e AAC como combinacao amplamente suportada.
+- Cloudflare Stream recomenda MP4, H.264, AAC e ate 60 fps para video on-demand.
 
 ## Midias existentes
 

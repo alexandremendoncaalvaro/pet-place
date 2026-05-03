@@ -3,7 +3,7 @@ import imageCompression from 'browser-image-compression';
 export const VIDEO_UPLOAD_LIMITS = {
   maxBytes: 50 * 1024 * 1024,
   maxDurationSeconds: 60,
-  supportedTypes: ['video/mp4', 'video/webm'],
+  supportedTypes: ['video/mp4'],
 };
 
 export async function compressImage(file: File) {
@@ -26,7 +26,7 @@ export async function compressImage(file: File) {
 export async function validateVideoForUpload(file: File): Promise<string | null> {
   if (!file.type.startsWith('video/')) return null;
   if (!VIDEO_UPLOAD_LIMITS.supportedTypes.includes(file.type)) {
-    return 'Use vídeo MP4 ou WebM. Arquivos MOV/QuickTime precisam ser convertidos antes do envio.';
+    return 'Use vídeo MP4 compatível com celular, preferencialmente H.264 com áudio AAC.';
   }
   if (file.size > VIDEO_UPLOAD_LIMITS.maxBytes) {
     return 'O vídeo não pode passar de 50MB.';
