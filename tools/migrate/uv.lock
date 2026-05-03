@@ -34,7 +34,7 @@ wheels = [
 ]
 
 [[package]]
-name = "caixinha-pet-migrate"
+name = "pet-place-migrate"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

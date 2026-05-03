@@ -18,7 +18,8 @@ O projeto resolve uma necessidade real: manter um espaço comunitário para pets
 - Mural com publicações, comentários, curtidas e marcações.
 - Cadastro de tutores, pets e vínculos familiares.
 - Sugestão de vínculo por telefone para unir cadastros offline e contas reais com aprovação administrativa.
-- Notificações Web Push sem Firebase Cloud Messaging.
+- Notificações Web Push para avisos relevantes.
+- Atualização em tempo real para mural, comentários, curtidas e notificações.
 
 ## Arquitetura
 
@@ -47,7 +48,7 @@ Ambientes:
 - Cloudflare Pages
 - GitHub Actions
 - Vitest
-- `mise` e `uv` para tooling local e migração
+- `mise` e `uv` para tooling local
 
 ## Design System
 
@@ -63,7 +64,7 @@ Diretrizes principais:
 
 ## Mídia
 
-A política de mídia fica em [docs/MEDIA_POLICY.md](docs/MEDIA_POLICY.md). Imagens sociais são otimizadas para WebP, vídeos do mural usam MP4/WebM com capa WebP, e comprovantes ou recibos permanecem no formato original para preservar auditoria.
+A política de mídia fica em [docs/MEDIA_POLICY.md](docs/MEDIA_POLICY.md). Imagens sociais são otimizadas para WebP, vídeos do mural usam MP4 com capa WebP, e comprovantes ou recibos permanecem no formato original para preservar auditoria.
 
 ## Rodando localmente
 
@@ -91,11 +92,11 @@ O deploy é automatizado por GitHub Actions:
 
 Detalhes em [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) e [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Seguranca
+## Segurança
 
 - Secret Scanning e push protection ficam habilitados no GitHub.
-- Dependabot monitora dependencias npm e GitHub Actions.
-- `npm run security:secrets` bloqueia secrets hard-coded na arvore atual do repo.
+- Dependabot monitora dependências npm e GitHub Actions.
+- `npm run security:secrets` bloqueia secrets hard-coded na árvore atual do repo.
 - Credenciais reais devem ficar apenas nos ambientes Cloudflare ou GitHub Actions.
 
 Detalhes em [SECURITY.md](SECURITY.md).
@@ -113,7 +114,3 @@ Resumo:
 - Fluxos sensíveis usam confirmação padronizada.
 - Toasts substituem `alert()` nativo.
 - Mudanças relevantes precisam passar por `npm run quality`.
-
-## Migração
-
-As ferramentas em [tools/migrate](tools/migrate) existem apenas para trazer dados históricos do Firebase para Cloudflare. Firebase não faz parte do runtime atual.

@@ -7,12 +7,12 @@
 | Dev | `development` | `pet-place-dev` | `https://pet-place-dev.pages.dev` | `caixinha_pet_place_dev` | `caixinha-pet-media-dev` |
 | Produção | `main` | `pet-place` | `https://pet-place.pages.dev` | `caixinha_pet_place` | `caixinha-pet-media` |
 
-O Pages não faz proxy por URL `workers.dev`. Ele usa Service Binding interno:
+O Pages usa Service Binding interno para chamar a API:
 
 - `pet-place.pages.dev` chama o binding `PET_PLACE` apontando para o Worker `pet-place`.
 - `pet-place-dev.pages.dev` chama o binding `PET_PLACE` apontando para o Worker `pet-place-dev`.
 
-Isso evita expor a API por host auxiliar e reduz risco operacional.
+Esse desenho mantém a API atrás dos domínios oficiais do app e reduz risco operacional.
 
 ## Fluxo de CI/CD
 

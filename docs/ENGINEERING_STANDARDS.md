@@ -19,7 +19,7 @@ Este app deve continuar simples, mas não informal. A regra é: pouca arquitetur
 - Comprovantes e recibos sobem como arquivo original. Não comprimir documento financeiro.
 - Mutações devem chamar `notifyDataChanged()` somente quando a UI precisa refazer leituras imediatamente.
 - Polling deve ser moderado. Default atual: 60s. Conteúdo social/notificações/comentários: 30s.
-- Service workers antigos precisam ser limpos quando trocamos provider de push.
+- Service workers devem ter escopo claro, atualização previsível e limpeza de caches incompatíveis.
 - Toda regra pura nova deve ganhar teste unitário.
 - Toda migration D1 deve ser idempotente quando possível e segura para rodar na esteira.
 - Fluxos sensíveis usam `FeedbackProvider` para confirmação/toast, não `alert()` ou `confirm()` nativos.
@@ -31,13 +31,14 @@ Este app deve continuar simples, mas não informal. A regra é: pouca arquitetur
 - Não adicionar SDK externo para resolver algo que o Worker/D1/R2 já fazem bem.
 - Não misturar regra de negócio nova direto em componente grande quando ela pode ser uma função pequena testável.
 - Não salvar telefones, emails ou IDs em formatos inconsistentes.
-- Não publicar docs antigas que contradizem a arquitetura atual.
+- Documentação publicada deve descrever contratos atuais, não decisões abandonadas.
 
 ## Quality Gates
 
 Os workflows precisam rodar, nessa ordem:
 
 - `npm ci`
+- `npm run security:secrets`
 - `npm run lint`
 - `npm test`
 - `npm run build`
@@ -52,19 +53,18 @@ O comando local obrigatório antes de promover é:
 npm run quality
 ```
 
-## Estado da Revisão Senior
+## Estado Atual
 
-Resolvido:
+Estabelecido:
 
 - Worker roteia API por domínio (`routePaymentsApi`, `routeUsersApi`, `routePostsApi`, etc.).
 - `src/services/api.ts` funciona como fachada pública; HTTP, polling, uploads e push ficam em módulos dedicados.
-- Feedback de UI foi padronizado em `FeedbackProvider`; não há `alert()` nativo nos componentes React.
+- `FeedbackProvider` centraliza confirmações, toasts e mensagens de erro.
 - Regras financeiras puras ficam em `src/lib/finance.ts` e têm teste unitário.
 - Telefone brasileiro tem normalização/formatação testada.
 - Dev e produção têm branches, bancos e buckets separados.
-- Docs antigas de Firebase runtime foram removidas da raiz. Firebase permanece apenas como fonte histórica nas ferramentas de migração.
 
-Ainda aceitável por enquanto:
+Pontos de evolução:
 
 - `AdminPanel.tsx` é grande. Novas telas administrativas devem nascer em componentes próprios.
 - `worker/index.ts` ainda concentra handlers. Nova feature grande deve mover handlers para arquivos por domínio.
@@ -74,7 +74,7 @@ Ainda aceitável por enquanto:
 
 - Unitário: formatação/normalização, cálculo de caixa, filtro por mês, rateio por família.
 - Integração Worker: auth mockada, permissões admin/usuário, pagamentos, despesas, upload de mídia e backup.
-- Migração: fixtures com usuários, família, comprovante ausente, mídia inválida e pagamentos duplicados.
+- Importação de dados: fixtures com usuários, família, comprovante ausente, mídia inválida e pagamentos duplicados.
 - E2E: login, mural, comprovante, transparência, painel admin e upload de recibo.
 - Smoke pós-deploy: `/api/health`, assets, D1 bindings e Pages proxy por Service Binding.
 

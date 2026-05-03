@@ -45,7 +45,7 @@ git tag v0.1.0 main
 git push origin v0.1.0
 ```
 
-O historico principal fica:
+O registro de releases fica:
 
 - commits atomicos em branches de trabalho;
 - release candidates apontando para validacoes em dev;
