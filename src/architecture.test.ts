@@ -69,8 +69,12 @@ describe('project architecture guardrails', () => {
     const createPostModal = read('src/components/CreatePostModal.tsx');
 
     expect(worker).toContain("request.headers.get('Range')");
+    expect(worker).toContain('parseByteRange');
+    expect(worker).toContain('env.MEDIA.head');
+    expect(worker).toContain('status: 416');
     expect(worker).toContain("headers.set('Accept-Ranges', 'bytes')");
     expect(worker).toContain("headers.set('Content-Range'");
+    expect(worker).toContain("headers.set('Content-Disposition', 'inline')");
     expect(worker).toContain('poster_key');
     expect(api).toContain('createVideoPoster');
     expect(uploads).toContain("'image/webp'");
@@ -79,6 +83,7 @@ describe('project architecture guardrails', () => {
     expect(createPostModal).not.toContain('video/quicktime');
     expect(postItem).toContain('poster={post.posterUrl}');
     expect(postItem).toContain('preload="metadata"');
+    expect(postItem).toContain('Video playback error');
   });
 
   it('keeps legacy Firebase runtime files out of the public repo root', () => {

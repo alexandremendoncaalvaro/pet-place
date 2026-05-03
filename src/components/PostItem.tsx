@@ -30,6 +30,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [showLikes, setShowLikes] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
   const visibleCommentCount = showComments && commentsLoaded ? comments.length : post.commentCount || 0;
   
   useEffect(() => {
@@ -166,15 +167,34 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
           onClick={() => post.mediaType !== 'video' && setFullscreenImage({url: post.mediaUrl!, title: `Publicação de ${author?.name || 'Participante'}`})}
         >
           {post.mediaType === 'video' ? (
-            <video
-              src={post.mediaUrl}
-              poster={post.posterUrl}
-              className="w-full h-full object-cover"
-              controls
-              muted
-              playsInline
-              preload="metadata"
-            />
+            <>
+              <video
+                src={post.mediaUrl}
+                poster={post.posterUrl}
+                className="w-full h-full object-cover"
+                controls
+                muted
+                playsInline
+                preload="metadata"
+                onCanPlay={() => setHasVideoError(false)}
+                onError={(event) => {
+                  const video = event.currentTarget;
+                  console.error('Video playback error', {
+                    postId: post.id,
+                    mediaUrl: post.mediaUrl,
+                    errorCode: video.error?.code,
+                    networkState: video.networkState,
+                    readyState: video.readyState,
+                  });
+                  setHasVideoError(true);
+                }}
+              />
+              {hasVideoError && (
+                <div className="absolute inset-x-4 bottom-4 rounded-xl bg-ink-900/85 px-4 py-3 text-sm font-medium text-white shadow-lg">
+                  Não consegui carregar este vídeo neste aparelho.
+                </div>
+              )}
+            </>
           ) : (
             <>
                <ImageWithSkeleton src={post.mediaUrl} alt="Post media" className="w-full h-full object-cover" containerClassName="w-full h-full" />

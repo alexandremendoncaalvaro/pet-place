@@ -1367,14 +1367,30 @@ async function savePushSubscriptionRoute(request: Request, env: Env, user: Curre
 async function serveMedia(key: string, request: Request, env: Env, _user: CurrentUser): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
   const rangeHeader = request.headers.get('Range');
-  const object = await env.MEDIA.get(decodedKey, rangeHeader ? { range: request.headers } : undefined);
+  const head = await env.MEDIA.head(decodedKey);
+  if (!head) return bad('Mídia não encontrada.', 404);
+
+  const parsedRange = rangeHeader ? parseByteRange(rangeHeader, head.size) : null;
+  if (rangeHeader && !parsedRange) {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'Accept-Ranges': 'bytes',
+        'Content-Range': `bytes */${head.size}`,
+      },
+    });
+  }
+
+  const object = await env.MEDIA.get(decodedKey, parsedRange ? { range: parsedRange } : undefined);
   if (!object) return bad('Mídia não encontrada.', 404);
   const headers = new Headers();
   object.writeHttpMetadata(headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', inferContentType(decodedKey));
   headers.set('etag', object.httpEtag);
   headers.set('Accept-Ranges', 'bytes');
   headers.set('Cache-Control', 'private, max-age=300');
-  if (rangeHeader && object.range) {
+  headers.set('Content-Disposition', 'inline');
+  if (parsedRange && object.range) {
     const range = normalizeR2Range(object.range, object.size);
     headers.set('Content-Range', `bytes ${range.offset}-${range.end}/${object.size}`);
     headers.set('Content-Length', String(range.length));
@@ -1382,6 +1398,24 @@ async function serveMedia(key: string, request: Request, env: Env, _user: Curren
   }
   headers.set('Content-Length', String(object.size));
   return new Response(object.body, { headers });
+}
+
+function parseByteRange(header: string, objectSize: number): R2Range | null {
+  const match = header.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) return null;
+  const [, startRaw, endRaw] = match;
+  if (!startRaw && !endRaw) return null;
+
+  if (!startRaw) {
+    const suffix = Number(endRaw);
+    if (!Number.isInteger(suffix) || suffix <= 0) return null;
+    return { suffix: Math.min(suffix, objectSize) };
+  }
+
+  const start = Number(startRaw);
+  const end = endRaw ? Number(endRaw) : objectSize - 1;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= objectSize) return null;
+  return { offset: start, length: Math.min(end, objectSize - 1) - start + 1 };
 }
 
 function normalizeR2Range(range: R2Range, objectSize: number): { offset: number; end: number; length: number } {
@@ -1393,6 +1427,17 @@ function normalizeR2Range(range: R2Range, objectSize: number): { offset: number;
   const offset = range.offset || 0;
   const length = range.length || Math.max(objectSize - offset, 0);
   return { offset, end: Math.min(offset + length - 1, objectSize - 1), length };
+}
+
+function inferContentType(key: string): string {
+  const lower = key.toLowerCase();
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return 'application/octet-stream';
 }
 
 async function putFile(env: Env, folder: string, file: File): Promise<string> {

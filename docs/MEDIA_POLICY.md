@@ -25,6 +25,7 @@ Esse padrao evita perda de legibilidade em comprovantes bancarios, recibos e ane
 - Limitar videos a 60 segundos e 50MB.
 - Gerar uma capa WebP no cliente e salvar junto do post.
 - Servir videos com suporte a HTTP Range para permitir seek e carregamento progressivo.
+- Para MP4 convertido, usar H.264 Main, AAC-LC, `yuv420p`, `+faststart` e remover trilhas de dados/timecode.
 
 Arquivos MOV/QuickTime podem usar codecs que o navegador nao reproduz de forma consistente. Quando o projeto adotar Cloudflare Stream, esse fluxo pode passar a aceitar MOV porque o Stream faz transcodificacao e entrega adaptativa.
 
