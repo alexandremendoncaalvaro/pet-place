@@ -3,12 +3,12 @@ import imageCompression from 'browser-image-compression';
 export const VIDEO_UPLOAD_LIMITS = {
   maxBytes: 50 * 1024 * 1024,
   maxDurationSeconds: 60,
-  supportedTypes: ['video/mp4'],
+  supportedTypes: ['video/mp4', 'video/quicktime', 'video/x-m4v'],
 };
 
 const MEDIA_EVENT_TIMEOUT_MS = 3500;
 const IMAGE_EXTENSIONS = new Set(['.avif', '.gif', '.jpeg', '.jpg', '.png', '.webp']);
-const VIDEO_EXTENSIONS = new Set(['.mp4']);
+const VIDEO_EXTENSIONS = new Set(['.m4v', '.mov', '.mp4']);
 
 export type UploadMediaKind = 'image' | 'video' | 'unknown';
 
@@ -21,15 +21,16 @@ export function classifyUploadMedia(file: File): UploadMediaKind {
 
 export function normalizeUploadFile(file: File, kind: UploadMediaKind) {
   if (file.type) return file;
-  if (kind === 'video' && VIDEO_EXTENSIONS.has(fileExtension(file.name))) {
-    return new File([file], file.name, { type: 'video/mp4', lastModified: file.lastModified });
+  const inferredType = getUploadMimeType(file, kind);
+  if (inferredType !== 'application/octet-stream') {
+    return new File([file], file.name, { type: inferredType, lastModified: file.lastModified });
   }
   return file;
 }
 
 export function getUploadMimeType(file: File, kind: UploadMediaKind = classifyUploadMedia(file)) {
   if (file.type) return file.type;
-  if (kind === 'video' && VIDEO_EXTENSIONS.has(fileExtension(file.name))) return 'video/mp4';
+  if (kind === 'video') return videoMimeFromExtension(file.name) || 'video/*';
   if (kind === 'image') return imageMimeFromExtension(file.name) || 'image/*';
   return 'application/octet-stream';
 }
@@ -54,16 +55,16 @@ export async function compressImage(file: File) {
 export async function validateVideoForUpload(file: File): Promise<string | null> {
   if (classifyUploadMedia(file) !== 'video') return null;
   if (!isSupportedVideoFile(file)) {
-    return 'Use vídeo MP4 compatível com celular, preferencialmente H.264 com áudio AAC.';
+    return 'Use video MP4 ou MOV compativel com celular.';
   }
   if (file.size > VIDEO_UPLOAD_LIMITS.maxBytes) {
-    return 'O vídeo não pode passar de 50MB.';
+    return 'O video nao pode passar de 50MB.';
   }
 
   try {
     const { duration } = await readVideoMetadata(file);
     if (Number.isFinite(duration) && duration > VIDEO_UPLOAD_LIMITS.maxDurationSeconds) {
-      return 'O vídeo não pode passar de 60 segundos.';
+      return 'O video nao pode passar de 60 segundos.';
     }
   } catch (error) {
     console.warn('Video metadata validation skipped:', error);
@@ -180,7 +181,8 @@ function stripExtension(name: string) {
 }
 
 function isSupportedVideoFile(file: File) {
-  return VIDEO_UPLOAD_LIMITS.supportedTypes.includes(file.type) || VIDEO_EXTENSIONS.has(fileExtension(file.name));
+  const type = file.type || videoMimeFromExtension(file.name) || '';
+  return VIDEO_UPLOAD_LIMITS.supportedTypes.includes(type) || VIDEO_EXTENSIONS.has(fileExtension(file.name));
 }
 
 function fileExtension(name: string) {
@@ -202,6 +204,19 @@ function imageMimeFromExtension(name: string) {
       return 'image/png';
     case '.webp':
       return 'image/webp';
+    default:
+      return null;
+  }
+}
+
+function videoMimeFromExtension(name: string) {
+  switch (fileExtension(name)) {
+    case '.m4v':
+      return 'video/x-m4v';
+    case '.mov':
+      return 'video/quicktime';
+    case '.mp4':
+      return 'video/mp4';
     default:
       return null;
   }

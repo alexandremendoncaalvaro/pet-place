@@ -106,7 +106,8 @@ describe('project architecture guardrails', () => {
     expect(uploads).toContain('validateVideoForUpload');
     expect(uploads).toContain('classifyUploadMedia');
     expect(uploads).toContain('getUploadMimeType');
-    expect(uploads).toContain("VIDEO_EXTENSIONS = new Set(['.mp4'])");
+    expect(uploads).toContain("VIDEO_EXTENSIONS = new Set(['.m4v', '.mov', '.mp4'])");
+    expect(uploads).toContain("'video/quicktime'");
     expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
     expect(uploads).toContain('Video metadata validation skipped');
     expect(createPostModal).toContain('accept="image/*,video/*,.mp4"');
@@ -114,10 +115,9 @@ describe('project architecture guardrails', () => {
     expect(createPostModal).toContain('controls');
     expect(createPostModal).toContain('poster={postVideoPosterUrl || undefined}');
     expect(createPostModal).not.toContain('postFileInputRef.current?.click()');
-    expect(createPostModal).not.toContain('video/quicktime');
     expect(createPostModal).not.toContain('video/webm');
     expect(uploads).not.toContain('Tente exportar como MP4 e enviar novamente');
-    expect(uploads).toContain("supportedTypes: ['video/mp4']");
+    expect(uploads).toContain("supportedTypes: ['video/mp4', 'video/quicktime', 'video/x-m4v']");
     expect(postItem).toContain('poster={post.posterUrl}');
     expect(postItem).toContain('src={videoSrc}');
     expect(postItem).not.toContain('crossOrigin="use-credentials"');

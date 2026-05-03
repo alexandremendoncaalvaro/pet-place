@@ -1450,6 +1450,8 @@ function normalizeR2Range(range: R2Range, objectSize: number): { offset: number;
 function inferContentType(key: string): string {
   const lower = key.toLowerCase();
   if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.mov') || lower.endsWith('.qt')) return 'video/quicktime';
+  if (lower.endsWith('.m4v')) return 'video/x-m4v';
   if (lower.endsWith('.webm')) return 'video/webm';
   if (lower.endsWith('.webp')) return 'image/webp';
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
