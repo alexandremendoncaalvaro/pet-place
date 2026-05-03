@@ -22,6 +22,11 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const [isPosting, setIsPosting] = useState(false);
   const [isValidatingMedia, setIsValidatingMedia] = useState(false);
   const postFileInputRef = useRef<HTMLInputElement>(null);
+  const postFilePreviewUrl = React.useMemo(() => postFile ? URL.createObjectURL(postFile) : null, [postFile]);
+
+  React.useEffect(() => () => {
+    if (postFilePreviewUrl) URL.revokeObjectURL(postFilePreviewUrl);
+  }, [postFilePreviewUrl]);
 
   const handleMediaSelected = async (file: File | undefined) => {
     if (!file) return;
@@ -131,9 +136,9 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">
                   {postFile.type.startsWith('video/') ? (
-                    <video src={URL.createObjectURL(postFile)} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop playsInline preload="metadata" />
+                    <video src={postFilePreviewUrl || undefined} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop playsInline preload="metadata" />
                   ) : (
-                    <ImageWithSkeleton src={URL.createObjectURL(postFile)} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-ink-100" containerClassName="w-full max-h-[40vh]" />
+                    <ImageWithSkeleton src={postFilePreviewUrl || ''} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-ink-100" containerClassName="w-full max-h-[40vh]" />
                   )}
                   <IconButton
                     onClick={() => setPostFile(null)}

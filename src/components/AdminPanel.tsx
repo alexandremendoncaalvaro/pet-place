@@ -1,13 +1,13 @@
 ﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
-import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar, ChevronDown } from 'lucide-react';
 import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup, createOfflineUser, createManualPayment, resolveIdentityLinkSuggestion } from '../services/api';
 import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 import { useFeedback } from './Feedback';
-import { Badge, Button, Card, EmptyState, FieldLabel, Page, TextInput } from './ui';
+import { Badge, Button, Card, EmptyState, FieldGroup, FieldLabel, Page, TextInput } from './ui';
 
 const DeletableUserButton = ({ u, currentUserId, deleteUserAndData }: { u: UserProfile, currentUserId?: string, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
@@ -298,6 +298,7 @@ function AdminPanelContent() {
 
 function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
   const { toast } = useFeedback();
+  const [isOpen, setIsOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -338,6 +339,7 @@ function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
       setAmount('25');
       setDescription('Comprovante recebido pelo WhatsApp');
       setFile(null);
+      setIsOpen(false);
       if (fileRef.current) fileRef.current.value = '';
     } catch (error: any) {
       toast(error?.message || 'Erro ao registrar comprovante.', 'error');
@@ -347,55 +349,90 @@ function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
   };
 
   return (
-    <Card as="form" onSubmit={handleSubmit} tone="brand" className="p-5 space-y-4">
-      <div>
-        <h3 className="font-semibold text-ink-900 text-lg">Registrar pagamento externo</h3>
-        <p className="text-xs text-ink-500 mt-1">Use para comprovantes enviados pelo WhatsApp, sem obrigar a pessoa a entrar no app.</p>
-      </div>
+    <Card tone="brand" className="p-4">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-base font-semibold text-ink-900">Pagamento externo</span>
+          <span className="mt-1 block text-xs text-ink-500">Registrar comprovante recebido fora do app.</span>
+        </span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-brand-600 shadow-sm">
+          <ChevronDown size={20} className={isOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+        </span>
+      </button>
 
-      <div>
-        <FieldLabel>Pessoa existente</FieldLabel>
-        <select
-          value={selectedUserId}
-          onChange={(event) => setSelectedUserId(event.target.value)}
-          className="w-full bg-white border border-ink-200 rounded-control px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
-        >
-          <option value="">Cadastrar nova pessoa offline</option>
-          {activeUsers.map((user) => (
-            <option key={user.uid} value={user.familyId || user.uid}>{user.name} {user.isOffline ? '(offline)' : ''}</option>
-          ))}
-        </select>
-      </div>
+      {isOpen && (
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4 border-t border-brand-100 pt-4">
+          <FieldGroup>
+            <FieldLabel>Pessoa</FieldLabel>
+            <select
+              value={selectedUserId}
+              onChange={(event) => setSelectedUserId(event.target.value)}
+              className="w-full rounded-control border border-ink-200 bg-white px-4 py-3 text-sm font-medium text-ink-700 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            >
+              <option value="">Cadastrar nova pessoa offline</option>
+              {activeUsers.map((user) => (
+                <option key={user.uid} value={user.familyId || user.uid}>{user.name} {user.isOffline ? '(offline)' : ''}</option>
+              ))}
+            </select>
+          </FieldGroup>
 
-      {!selectedUserId && (
-        <div className="grid grid-cols-1 gap-3">
-          <TextInput required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome da pessoa" className="bg-white text-sm" />
-          <TextInput required value={phone} onChange={(event) => setPhone(formatPhoneBR(event.target.value))} placeholder={PHONE_BR_PLACEHOLDER} inputMode="tel" autoComplete="tel-national" maxLength={15} className="bg-white text-sm" />
-          <TextInput value={dogName} onChange={(event) => setDogName(event.target.value)} placeholder="Nome do pet (opcional)" className="bg-white text-sm" />
-        </div>
+          {!selectedUserId && (
+            <div className="grid grid-cols-1 gap-3">
+              <FieldGroup>
+                <FieldLabel>Nome completo</FieldLabel>
+                <TextInput required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome da pessoa" className="bg-white text-sm" />
+              </FieldGroup>
+              <FieldGroup>
+                <FieldLabel>Celular</FieldLabel>
+                <TextInput required value={phone} onChange={(event) => setPhone(formatPhoneBR(event.target.value))} placeholder={PHONE_BR_PLACEHOLDER} inputMode="tel" autoComplete="tel-national" maxLength={15} className="bg-white text-sm" />
+              </FieldGroup>
+              <FieldGroup>
+                <FieldLabel>Pet</FieldLabel>
+                <TextInput value={dogName} onChange={(event) => setDogName(event.target.value)} placeholder="Nome do pet (opcional)" className="bg-white text-sm" />
+              </FieldGroup>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FieldGroup>
+              <FieldLabel>Competência</FieldLabel>
+              <TextInput required type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="bg-white text-sm" />
+            </FieldGroup>
+            <FieldGroup>
+              <FieldLabel>Valor recebido (R$)</FieldLabel>
+              <TextInput required type="number" min="0.01" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="25,00" className="bg-white text-sm" />
+            </FieldGroup>
+          </div>
+
+          <FieldGroup>
+            <FieldLabel>Tipo de entrada</FieldLabel>
+            <select value={type} onChange={(event) => setType(event.target.value as NonNullable<Payment['type']>)} className="w-full rounded-control border border-ink-200 bg-white px-4 py-3 text-sm font-medium text-ink-700 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20">
+              <option value="mensalidade">Mensalidade</option>
+              <option value="doacao">Doação</option>
+              <option value="rateio">Rateio</option>
+            </select>
+          </FieldGroup>
+
+          <FieldGroup>
+            <FieldLabel>Descrição para transparência</FieldLabel>
+            <TextInput value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Comprovante recebido pelo WhatsApp" className="bg-white text-sm" />
+          </FieldGroup>
+
+          <Button type="button" onClick={() => fileRef.current?.click()} variant="ghost" className="w-full bg-white text-brand-600">
+            <Receipt size={18} className="mr-2" /> {file ? file.name : 'Anexar comprovante'}
+          </Button>
+          <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+
+          <Button disabled={loading} type="submit" className="w-full">
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <><Plus size={18} className="mr-2" /> Registrar no caixa</>}
+          </Button>
+        </form>
       )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <TextInput required type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="bg-white text-sm" />
-        <TextInput required type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="bg-white text-sm" />
-      </div>
-
-      <select value={type} onChange={(event) => setType(event.target.value as NonNullable<Payment['type']>)} className="w-full bg-white border border-ink-200 rounded-control px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm">
-        <option value="mensalidade">Mensalidade</option>
-        <option value="doacao">Doação</option>
-        <option value="rateio">Rateio</option>
-      </select>
-
-      <TextInput value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" className="bg-white text-sm" />
-
-      <Button type="button" onClick={() => fileRef.current?.click()} variant="ghost" className="w-full bg-white text-brand-600">
-        <Receipt size={18} className="mr-2" /> {file ? file.name : 'Anexar comprovante'}
-      </Button>
-      <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
-
-      <Button disabled={loading} type="submit" className="w-full">
-        {loading ? <Loader2 size={18} className="animate-spin" /> : <><Plus size={18} className="mr-2" /> Registrar no caixa</>}
-      </Button>
     </Card>
   );
 }

@@ -51,6 +51,15 @@ describe('project architecture guardrails', () => {
     expect(subscriptions).toContain('matchesTopic');
   });
 
+  it('keeps the external payment form compact and mobile-first', () => {
+    const adminPanel = read('src/components/AdminPanel.tsx');
+
+    expect(adminPanel).toContain('aria-expanded={isOpen}');
+    expect(adminPanel).toContain('Valor recebido (R$)');
+    expect(adminPanel).toContain('grid grid-cols-1 gap-3 sm:grid-cols-2');
+    expect(adminPanel).not.toContain('grid grid-cols-2 gap-3');
+  });
+
   it('keeps post comment counts available before opening the comment drawer', () => {
     const worker = read('worker/index.ts');
     const postItem = read('src/components/PostItem.tsx');
@@ -89,9 +98,12 @@ describe('project architecture guardrails', () => {
     expect(api).toContain('createVideoPoster');
     expect(uploads).toContain("'image/webp'");
     expect(uploads).toContain('validateVideoForUpload');
+    expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
+    expect(uploads).toContain('Video metadata validation skipped');
     expect(createPostModal).toContain('image/*,video/mp4');
     expect(createPostModal).not.toContain('video/quicktime');
     expect(createPostModal).not.toContain('video/webm');
+    expect(uploads).not.toContain('Tente exportar como MP4 e enviar novamente');
     expect(uploads).toContain("supportedTypes: ['video/mp4']");
     expect(postItem).toContain('poster={post.posterUrl}');
     expect(postItem).toContain('src={videoSrc}');
