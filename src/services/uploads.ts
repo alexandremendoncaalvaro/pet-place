@@ -27,6 +27,13 @@ export function normalizeUploadFile(file: File, kind: UploadMediaKind) {
   return file;
 }
 
+export function getUploadMimeType(file: File, kind: UploadMediaKind = classifyUploadMedia(file)) {
+  if (file.type) return file.type;
+  if (kind === 'video' && VIDEO_EXTENSIONS.has(fileExtension(file.name))) return 'video/mp4';
+  if (kind === 'image') return imageMimeFromExtension(file.name) || 'image/*';
+  return 'application/octet-stream';
+}
+
 export async function compressImage(file: File) {
   if (classifyUploadMedia(file) !== 'image') return file;
   try {
@@ -180,4 +187,22 @@ function fileExtension(name: string) {
   const cleanName = name.toLowerCase().split('?')[0].split('#')[0];
   const index = cleanName.lastIndexOf('.');
   return index >= 0 ? cleanName.slice(index) : '';
+}
+
+function imageMimeFromExtension(name: string) {
+  switch (fileExtension(name)) {
+    case '.avif':
+      return 'image/avif';
+    case '.gif':
+      return 'image/gif';
+    case '.jpeg':
+    case '.jpg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.webp':
+      return 'image/webp';
+    default:
+      return null;
+  }
 }

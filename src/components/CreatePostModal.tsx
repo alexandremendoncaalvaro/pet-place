@@ -1,8 +1,8 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, ImagePlus, AtSign } from 'lucide-react';
+import { X, ImagePlus, AtSign, FileVideo } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
-import { classifyUploadMedia, validateVideoForUpload } from '../services/uploads';
+import { classifyUploadMedia, createVideoPoster, getUploadMimeType, normalizeUploadFile, validateVideoForUpload } from '../services/uploads';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
 import { Badge, Button, IconButton, ModalSurface } from './ui';
@@ -21,21 +21,35 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [isValidatingMedia, setIsValidatingMedia] = useState(false);
-  const postFileInputRef = useRef<HTMLInputElement>(null);
-  const postFilePreviewUrl = React.useMemo(() => postFile ? URL.createObjectURL(postFile) : null, [postFile]);
+  const [isPreparingPoster, setIsPreparingPoster] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [postVideoPosterUrl, setPostVideoPosterUrl] = useState<string | null>(null);
+
+  const postFileKind = postFile ? classifyUploadMedia(postFile) : 'unknown';
+  const postFilePreviewUrl = React.useMemo(
+    () => postFile ? URL.createObjectURL(normalizeUploadFile(postFile, postFileKind)) : null,
+    [postFile, postFileKind],
+  );
 
   React.useEffect(() => () => {
     if (postFilePreviewUrl) URL.revokeObjectURL(postFilePreviewUrl);
   }, [postFilePreviewUrl]);
 
+  React.useEffect(() => () => {
+    if (postVideoPosterUrl) URL.revokeObjectURL(postVideoPosterUrl);
+  }, [postVideoPosterUrl]);
+
   const handleMediaSelected = async (file: File | undefined) => {
     if (!file) return;
     setIsValidatingMedia(true);
+    setMediaError(null);
+    setPostVideoPosterUrl(null);
     try {
       const mediaKind = classifyUploadMedia(file);
       if (mediaKind === 'video') {
         const validationError = await validateVideoForUpload(file);
         if (validationError) {
+          setMediaError(`${validationError} Arquivo selecionado: ${file.name || 'sem nome'} (${getUploadMimeType(file, mediaKind)}).`);
           toast(validationError, 'error');
           return;
         }
@@ -46,10 +60,36 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
         toast('Use uma imagem ou um vídeo MP4.', 'error');
         return;
       }
+
       setPostFile(file);
+      if (mediaKind === 'video') void prepareVideoPoster(file);
     } finally {
       setIsValidatingMedia(false);
     }
+  };
+
+  const prepareVideoPoster = async (file: File) => {
+    setIsPreparingPoster(true);
+    try {
+      const poster = await createVideoPoster(file);
+      if (!poster) return;
+      const posterUrl = URL.createObjectURL(poster);
+      setPostVideoPosterUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return posterUrl;
+      });
+    } finally {
+      setIsPreparingPoster(false);
+    }
+  };
+
+  const clearPostFile = () => {
+    setPostFile(null);
+    setMediaError(null);
+    setPostVideoPosterUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return null;
+    });
   };
 
   const handleCreatePost = async () => {
@@ -66,17 +106,14 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
       }
       await addPost(postData, postFile || undefined);
 
-      // Submit notifications for tags
       if (postTags.length > 0) {
         const targetUids = new Set<string>();
 
         postTags.forEach(tagId => {
-          // Check if it's a person
           const taggedUser = publicProfiles.find(p => p.uid === tagId);
           if (taggedUser) {
             targetUids.add(taggedUser.uid);
           } else {
-            // Check if it's a pet
             const taggedPet = allPets.find(p => p.id === tagId);
             if (taggedPet) {
               const owners = publicProfiles.filter(p => (p.familyId || p.uid) === taggedPet.familyId);
@@ -85,7 +122,6 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
           }
         });
 
-        // Remove author from notifications list
         targetUids.delete(user!.uid);
 
         targetUids.forEach(uid => {
@@ -139,17 +175,40 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">
-                  {classifyUploadMedia(postFile) === 'video' ? (
-                    <video src={postFilePreviewUrl || undefined} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop playsInline preload="metadata" />
+                  {postFileKind === 'video' ? (
+                    <div className="overflow-hidden rounded-2xl border border-ink-100 bg-black">
+                      <video
+                        key={postFilePreviewUrl}
+                        className="w-full max-h-[40vh] bg-black object-contain"
+                        controls
+                        playsInline
+                        preload="metadata"
+                        poster={postVideoPosterUrl || undefined}
+                      >
+                        {postFilePreviewUrl && <source src={postFilePreviewUrl} type={getUploadMimeType(postFile, postFileKind)} />}
+                      </video>
+                      <div className="flex items-center gap-2 bg-ink-900 px-3 py-2 text-xs font-medium text-white">
+                        <FileVideo size={14} />
+                        <span className="min-w-0 flex-1 truncate">{postFile.name}</span>
+                        <span className="shrink-0 text-white/70">{formatBytes(postFile.size)}</span>
+                      </div>
+                      {isPreparingPoster && <p className="bg-ink-900 px-3 pb-2 text-xs text-white/60">Preparando capa do vídeo...</p>}
+                    </div>
                   ) : (
                     <ImageWithSkeleton src={postFilePreviewUrl || ''} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-ink-100" containerClassName="w-full max-h-[40vh]" />
                   )}
                   <IconButton
-                    onClick={() => setPostFile(null)}
+                    onClick={clearPostFile}
                     className="absolute top-2 right-2 bg-ink-900/80 text-white backdrop-blur-md hover:bg-black"
                   >
                     <X size={16}/>
                   </IconButton>
+                </div>
+              )}
+
+              {mediaError && (
+                <div className="mt-3 rounded-control border border-danger-100 bg-danger-50 px-3 py-2 text-sm font-medium text-danger-600">
+                  {mediaError}
                 </div>
               )}
             </div>
@@ -184,13 +243,13 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
         <div className="p-2 px-4 border-t border-ink-100 flex items-center justify-between bg-white pb-safe">
           <div className="flex items-center gap-1 text-brand-600">
-            <IconButton
-              onClick={() => postFileInputRef.current?.click()}
-              className="hover:bg-brand-50"
+            <label
+              htmlFor="post-media-input"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full transition-all active:scale-[0.98] hover:bg-brand-50"
               aria-label="Adicionar mídia"
             >
               <ImagePlus size={22} />
-            </IconButton>
+            </label>
             <IconButton
               onClick={() => setShowTagSelector(!showTagSelector)}
               className={showTagSelector || postTags.length > 0 ? 'bg-brand-100 text-brand-700' : 'hover:bg-brand-50'}
@@ -205,10 +264,10 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
           </span>
 
           <input
+            id="post-media-input"
             type="file"
-            accept="image/*,.mp4,video/mp4"
-            className="hidden"
-            ref={postFileInputRef}
+            accept="image/*,video/*,.mp4"
+            className="absolute h-px w-px overflow-hidden whitespace-nowrap border-0 p-0 opacity-0"
             onChange={e => {
               const file = e.target.files?.[0];
               e.currentTarget.value = '';
@@ -219,4 +278,10 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
       </ModalSurface>
     </div>
   );
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

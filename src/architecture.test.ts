@@ -26,6 +26,12 @@ describe('project architecture guardrails', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps feedback above modal surfaces', () => {
+    const feedback = read('src/components/Feedback.tsx');
+
+    expect(feedback).toContain('z-[220]');
+  });
+
   it('keeps the dev deployment branch standardized as development', () => {
     const workflow = read('.github/workflows/deploy-dev.yml');
 
@@ -99,10 +105,15 @@ describe('project architecture guardrails', () => {
     expect(uploads).toContain("'image/webp'");
     expect(uploads).toContain('validateVideoForUpload');
     expect(uploads).toContain('classifyUploadMedia');
+    expect(uploads).toContain('getUploadMimeType');
     expect(uploads).toContain("VIDEO_EXTENSIONS = new Set(['.mp4'])");
     expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
     expect(uploads).toContain('Video metadata validation skipped');
-    expect(createPostModal).toContain('image/*,.mp4,video/mp4');
+    expect(createPostModal).toContain('accept="image/*,video/*,.mp4"');
+    expect(createPostModal).toContain('htmlFor="post-media-input"');
+    expect(createPostModal).toContain('controls');
+    expect(createPostModal).toContain('poster={postVideoPosterUrl || undefined}');
+    expect(createPostModal).not.toContain('postFileInputRef.current?.click()');
     expect(createPostModal).not.toContain('video/quicktime');
     expect(createPostModal).not.toContain('video/webm');
     expect(uploads).not.toContain('Tente exportar como MP4 e enviar novamente');
