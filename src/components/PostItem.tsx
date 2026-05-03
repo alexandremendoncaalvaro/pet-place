@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X, Eye } from 'lucide-react';
@@ -31,7 +31,23 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [newComment, setNewComment] = useState('');
   const [showLikes, setShowLikes] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
+  const [videoSrc, setVideoSrc] = useState(post.mediaUrl);
+  const videoBlobUrlRef = useRef<string | null>(null);
+  const videoRecoveryAttemptedRef = useRef(false);
   const visibleCommentCount = showComments && commentsLoaded ? comments.length : post.commentCount || 0;
+
+  useEffect(() => {
+    if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
+    videoBlobUrlRef.current = null;
+    videoRecoveryAttemptedRef.current = false;
+    setHasVideoError(false);
+    setVideoSrc(post.mediaUrl);
+
+    return () => {
+      if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
+      videoBlobUrlRef.current = null;
+    };
+  }, [post.mediaUrl]);
   
   useEffect(() => {
     let unsub: () => void;
@@ -113,6 +129,44 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     }
   };
 
+  const recoverVideoPlayback = async () => {
+    if (!post.mediaUrl || videoRecoveryAttemptedRef.current) {
+      setHasVideoError(true);
+      return;
+    }
+    videoRecoveryAttemptedRef.current = true;
+    try {
+      const response = await fetch(post.mediaUrl, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const headers = {
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length'),
+        contentRange: response.headers.get('content-range'),
+        acceptRanges: response.headers.get('accept-ranges'),
+      };
+      if (!response.ok) {
+        console.error('Video fallback fetch failed', { postId: post.id, mediaUrl: post.mediaUrl, ...headers });
+        setHasVideoError(true);
+        return;
+      }
+      const blob = await response.blob();
+      const signature = Array.from(new Uint8Array(await blob.slice(0, 16).arrayBuffer()))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(' ');
+      console.info('Video fallback fetch succeeded', { postId: post.id, mediaUrl: post.mediaUrl, ...headers, blobType: blob.type, blobSize: blob.size, signature });
+      if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
+      videoBlobUrlRef.current = URL.createObjectURL(blob);
+      setHasVideoError(false);
+      setVideoSrc(videoBlobUrlRef.current);
+    } catch (error) {
+      console.error('Video fallback fetch crashed', { postId: post.id, mediaUrl: post.mediaUrl, error });
+      setHasVideoError(true);
+    }
+  };
+
   return (
     <Card className="overflow-hidden">
       <div className="p-4 flex items-center gap-3 relative">
@@ -169,7 +223,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
           {post.mediaType === 'video' ? (
             <>
               <video
-                src={post.mediaUrl}
+                src={videoSrc}
                 poster={post.posterUrl}
                 className="w-full h-full object-cover"
                 controls
@@ -181,12 +235,12 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
                   const video = event.currentTarget;
                   console.error('Video playback error', {
                     postId: post.id,
-                    mediaUrl: post.mediaUrl,
+                    mediaUrl: videoSrc,
                     errorCode: video.error?.code,
                     networkState: video.networkState,
                     readyState: video.readyState,
                   });
-                  setHasVideoError(true);
+                  void recoverVideoPlayback();
                 }}
               />
               {hasVideoError && (
