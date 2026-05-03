@@ -26,7 +26,7 @@ Esse padrao evita perda de legibilidade em comprovantes bancarios, recibos e ane
 - Gerar uma capa WebP no cliente e salvar junto do post.
 - Servir videos com suporte a HTTP Range para permitir seek e carregamento progressivo.
 - Para MP4 convertido, usar H.264 Baseline 3.1, AAC-LC, `yuv420p`, `+faststart` e remover trilhas de dados/timecode.
-- Declarar o source como `video/mp4; codecs="avc1.42E01F, mp4a.40.2"` para alinhar com o alvo de compatibilidade.
+- Nao declarar `codecs` manualmente no `<source>` quando o valor nao foi calculado a partir do arquivo final; um valor incorreto pode fazer o navegador rejeitar a fonte antes de tentar carregar o video.
 
 Arquivos MOV/QuickTime, WebM e MP4 com codecs diferentes podem nao reproduzir de forma consistente em todos os celulares. Quando o projeto adotar Cloudflare Stream, esse fluxo pode passar a aceitar MOV/WebM porque o Stream faz transcodificacao e entrega adaptativa.
 

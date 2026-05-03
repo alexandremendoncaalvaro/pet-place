@@ -84,8 +84,9 @@ describe('project architecture guardrails', () => {
     expect(createPostModal).not.toContain('video/webm');
     expect(uploads).toContain("supportedTypes: ['video/mp4']");
     expect(postItem).toContain('poster={post.posterUrl}');
-    expect(postItem).toContain('crossOrigin="use-credentials"');
-    expect(postItem).toContain('avc1.42E01F, mp4a.40.2');
+    expect(postItem).toContain('src={post.mediaUrl}');
+    expect(postItem).not.toContain('crossOrigin="use-credentials"');
+    expect(postItem).not.toContain('codecs=');
     expect(postItem).toContain('preload="metadata"');
     expect(postItem).toContain('Video playback error');
   });

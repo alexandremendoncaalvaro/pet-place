@@ -169,13 +169,13 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
           {post.mediaType === 'video' ? (
             <>
               <video
+                src={post.mediaUrl}
                 poster={post.posterUrl}
                 className="w-full h-full object-cover"
                 controls
                 muted
                 playsInline
                 preload="metadata"
-                crossOrigin="use-credentials"
                 onCanPlay={() => setHasVideoError(false)}
                 onError={(event) => {
                   const video = event.currentTarget;
@@ -188,9 +188,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
                   });
                   setHasVideoError(true);
                 }}
-              >
-                <source src={post.mediaUrl} type='video/mp4; codecs="avc1.42E01F, mp4a.40.2"' />
-              </video>
+              />
               {hasVideoError && (
                 <div className="absolute inset-x-4 bottom-4 rounded-xl bg-ink-900/85 px-4 py-3 text-sm font-medium text-white shadow-lg">
                   Não consegui carregar este vídeo neste aparelho.
