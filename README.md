@@ -91,6 +91,15 @@ O deploy é automatizado por GitHub Actions:
 
 Detalhes em [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) e [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## Seguranca
+
+- Secret Scanning e push protection ficam habilitados no GitHub.
+- Dependabot monitora dependencias npm e GitHub Actions.
+- `npm run security:secrets` bloqueia secrets hard-coded na arvore atual do repo.
+- Credenciais reais devem ficar apenas nos ambientes Cloudflare ou GitHub Actions.
+
+Detalhes em [SECURITY.md](SECURITY.md).
+
 ## Padrões de Engenharia
 
 Os padrões de arquitetura, testes, qualidade e operação ficam em [docs/ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md).

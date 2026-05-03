@@ -17,9 +17,10 @@
     "pages:dev": "wrangler pages deploy pages-proxy-dev --project-name pet-place-dev --branch development",
     "preview": "vite preview",
     "clean": "rm -rf dist",
+    "security:secrets": "node tools/security/scan-secrets.mjs",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "quality": "npm run lint && npm test && npm run build",
+    "quality": "npm run security:secrets && npm run lint && npm test && npm run build",
     "smoke:dev": "node tools/smoke.mjs https://pet-place-dev.pages.dev",
     "smoke:prod": "node tools/smoke.mjs https://pet-place.pages.dev"
   },
