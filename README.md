@@ -1,4 +1,4 @@
-# Caixinha Pet Place
+# Pet Place
 
 <p align="center">
   <img src="assets/pet-place.jpeg" alt="Símbolo do Pet Place" width="420" />

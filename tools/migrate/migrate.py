@@ -51,7 +51,7 @@ def main() -> None:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-    parser = argparse.ArgumentParser(description="Migrate Caixinha Pet Place from Firebase to Cloudflare.")
+    parser = argparse.ArgumentParser(description="Migrate Pet Place from Firebase to Cloudflare.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     for name in ("audit", "export"):

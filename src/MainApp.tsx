@@ -19,7 +19,7 @@ export function MainApp() {
   const [showCreatePost, setShowCreatePost] = useState(false);
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center text-ink-500 animate-pulse text-lg">Carregando Caixinha...</div>;
+    return <div className="flex h-screen items-center justify-center text-ink-500 animate-pulse text-lg">Carregando Pet Place...</div>;
   }
 
   if (!user) {
@@ -29,7 +29,7 @@ export function MainApp() {
           <div className="w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-6">
             <PieChart size={32} />
           </div>
-          <h1 className="text-2xl font-semibold mb-2 text-ink-900">Caixinha Pet Place</h1>
+          <h1 className="text-2xl font-semibold mb-2 text-ink-900">Pet Place</h1>
           <p className="text-ink-500 mb-8 max-w-xs text-sm">Transparência e facilidade para a manutenção do nosso espaço.</p>
           <Button onClick={login} className="w-full touch-manipulation" size="lg">
             Entrar com Google

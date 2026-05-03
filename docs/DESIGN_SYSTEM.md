@@ -1,6 +1,6 @@
 # Design System
 
-O design system do Caixinha Pet Place é pragmático: tokens claros, poucos primitives e consistência visual suficiente para o app crescer sem virar uma coleção de telas desconexas.
+O design system do Pet Place é pragmático: tokens claros, poucos primitives e consistência visual suficiente para o app crescer sem virar uma coleção de telas desconexas.
 
 As referências principais são:
 

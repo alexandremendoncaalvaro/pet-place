@@ -16,7 +16,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 async function showLatestNotification() {
-  let title = 'Caixinha Pet Place';
+  let title = 'Pet Place';
   let body = 'Você tem uma nova atualização.';
   let tag = 'caixinha-notification';
 

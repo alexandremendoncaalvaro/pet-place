@@ -1,4 +1,4 @@
-# Caixinha Pet Place migration tooling
+# Pet Place migration tooling
 
 Run from the repo root with `uv`:
 
