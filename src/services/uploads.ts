@@ -7,9 +7,28 @@ export const VIDEO_UPLOAD_LIMITS = {
 };
 
 const MEDIA_EVENT_TIMEOUT_MS = 3500;
+const IMAGE_EXTENSIONS = new Set(['.avif', '.gif', '.jpeg', '.jpg', '.png', '.webp']);
+const VIDEO_EXTENSIONS = new Set(['.mp4']);
+
+export type UploadMediaKind = 'image' | 'video' | 'unknown';
+
+export function classifyUploadMedia(file: File): UploadMediaKind {
+  const extension = fileExtension(file.name);
+  if (file.type.startsWith('image/') || IMAGE_EXTENSIONS.has(extension)) return 'image';
+  if (file.type.startsWith('video/') || VIDEO_EXTENSIONS.has(extension)) return 'video';
+  return 'unknown';
+}
+
+export function normalizeUploadFile(file: File, kind: UploadMediaKind) {
+  if (file.type) return file;
+  if (kind === 'video' && VIDEO_EXTENSIONS.has(fileExtension(file.name))) {
+    return new File([file], file.name, { type: 'video/mp4', lastModified: file.lastModified });
+  }
+  return file;
+}
 
 export async function compressImage(file: File) {
-  if (!file.type.startsWith('image/')) return file;
+  if (classifyUploadMedia(file) !== 'image') return file;
   try {
     const compressed = await imageCompression(file, {
       maxSizeMB: 1.2,
@@ -26,8 +45,8 @@ export async function compressImage(file: File) {
 }
 
 export async function validateVideoForUpload(file: File): Promise<string | null> {
-  if (!file.type.startsWith('video/')) return null;
-  if (!VIDEO_UPLOAD_LIMITS.supportedTypes.includes(file.type)) {
+  if (classifyUploadMedia(file) !== 'video') return null;
+  if (!isSupportedVideoFile(file)) {
     return 'Use vídeo MP4 compatível com celular, preferencialmente H.264 com áudio AAC.';
   }
   if (file.size > VIDEO_UPLOAD_LIMITS.maxBytes) {
@@ -47,9 +66,10 @@ export async function validateVideoForUpload(file: File): Promise<string | null>
 }
 
 export async function createVideoPoster(file: File): Promise<File | null> {
-  if (!file.type.startsWith('video/')) return null;
+  if (classifyUploadMedia(file) !== 'video') return null;
 
-  const objectUrl = URL.createObjectURL(file);
+  const sourceFile = normalizeUploadFile(file, 'video');
+  const objectUrl = URL.createObjectURL(sourceFile);
   try {
     const video = document.createElement('video');
     video.preload = 'metadata';
@@ -150,4 +170,14 @@ function withExtension(file: File, originalName: string, extension: string, type
 
 function stripExtension(name: string) {
   return name.replace(/\.[^.]+$/, '') || 'media';
+}
+
+function isSupportedVideoFile(file: File) {
+  return VIDEO_UPLOAD_LIMITS.supportedTypes.includes(file.type) || VIDEO_EXTENSIONS.has(fileExtension(file.name));
+}
+
+function fileExtension(name: string) {
+  const cleanName = name.toLowerCase().split('?')[0].split('#')[0];
+  const index = cleanName.lastIndexOf('.');
+  return index >= 0 ? cleanName.slice(index) : '';
 }
