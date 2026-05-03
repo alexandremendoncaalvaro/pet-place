@@ -4,7 +4,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000';
 const recordTutorialVideo = process.env.PLAYWRIGHT_VIDEO === 'on';
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './tests',
   timeout: 30_000,
   expect: {
     timeout: 7_500,
@@ -33,6 +33,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testMatch: /e2e\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 900 },
@@ -40,10 +41,13 @@ export default defineConfig({
     },
     {
       name: 'tutorial-chromium',
-      testIgnore: /.*\.mobile\.spec\.ts/,
+      testMatch: /tutorial\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 390, height: 844 },
+        launchOptions: {
+          slowMo: 150,
+        },
       },
     },
   ],

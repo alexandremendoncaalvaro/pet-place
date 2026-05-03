@@ -12,13 +12,15 @@ npm run test:e2e:tutorial
 
 - `test:e2e`: roda a suite funcional em Chromium.
 - `test:e2e:headed`: abre o navegador para depuracao local.
-- `test:e2e:tutorial`: roda em viewport mobile e grava video de todos os testes.
+- `test:e2e:tutorial`: roda uma suite separada, em viewport mobile, com ritmo mais humano, grava videos e copia os arquivos para `docs/tutorials/generated/`.
 
-Por padrao, os videos brutos ficam em `test-results/` e nao entram no Git. Videos finais para tutorial devem ser revisados, comprimidos e salvos manualmente em `docs/tutorials/`.
+Por padrao, os videos brutos ficam em `test-results/` e nao entram no Git. O comando de tutorial tambem copia videos renomeados para `docs/tutorials/generated/`, que continua ignorado pelo Git. Videos finais devem ser revisados, comprimidos e salvos manualmente em `docs/tutorials/`.
 
 ## Modelo adotado
 
-A primeira suite usa fixtures de API em `tests/e2e/support/`. Isso deixa o teste deterministico, independente de Google OAuth real e seguro para rodar localmente ou em CI.
+A suite de regressao usa fixtures de API em `tests/e2e/support/`. Isso deixa o teste deterministico, independente de Google OAuth real e seguro para rodar localmente ou em CI. A suite de tutorial reaproveita as mesmas fixtures, mas tem passos mais longos e pausas intencionais para gerar videos compreensiveis.
+
+Os testes E2E devem validar a tela e nao apenas textos auxiliares. Para imagens importantes, como comprovantes, o padrao e validar que o `img` esta visivel, carregado, com `naturalWidth`/`naturalHeight` maiores que zero e opacidade final aplicada.
 
 Esses testes cobrem a aplicacao como usuario, mas ainda nao substituem uma suite futura ponta a ponta contra D1/R2 reais. Para isso, o caminho recomendado e adicionar autenticacao de teste somente em ambiente `dev`/`test`, protegida por segredo e nunca habilitada em producao.
 

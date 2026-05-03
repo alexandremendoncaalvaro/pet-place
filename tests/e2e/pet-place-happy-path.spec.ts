@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createPetPlaceState, installPetPlaceApiMock, PetPlaceE2EState } from './support/pet-place-fixture';
+import { createPetPlaceState, expectImageLoaded, installPetPlaceApiMock, PetPlaceE2EState } from './support/pet-place-fixture';
 
 let state: PetPlaceE2EState;
 
@@ -14,6 +14,7 @@ test('01 - home mostra mensalidade vigente e feed inicial', async ({ page }) => 
   await expect(page.getByText(/Mensalidade:/)).toBeVisible();
   await expect(page.getByText(/Em dia/)).toBeVisible();
   await expect(page.getByText(/Amora brincando/)).toBeVisible();
+  await expectImageLoaded(page.getByAltText('Post media').first());
   await expect(page.getByRole('button', { name: 'Comentários da publicação' })).toContainText('2');
 });
 
@@ -23,6 +24,7 @@ test('02 - detalhes da mensalidade exibem historico e comprovante em tela cheia'
   await expect(page.getByText(/Historico|Histórico/)).toBeVisible();
   await page.getByRole('button', { name: /Ver Comprovante/ }).first().click();
   await expect(page.getByText(/Comprovante:/)).toBeVisible();
+  await expectImageLoaded(page.locator('[class*="fixed"] img').last());
 });
 
 test('03 - extrato mostra entradas, saidas e historico do caixa', async ({ page }) => {
@@ -49,6 +51,7 @@ test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
   await expect(page.getByText('Marielle Santos')).toBeVisible();
   await page.getByPlaceholder('Buscar...').fill('Belinha');
   await expect(page.getByText('Belinha')).toBeVisible();
+  await expectImageLoaded(page.getByAltText('Belinha').first());
 });
 
 test('06 - perfil atualiza telefone no formato brasileiro', async ({ page }) => {

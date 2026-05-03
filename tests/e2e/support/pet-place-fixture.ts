@@ -1,4 +1,4 @@
-import { Page, Request, Route } from '@playwright/test';
+import { expect, Locator, Page, Request, Route } from '@playwright/test';
 import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, UserProfile } from '../../../src/lib/types';
 
 export interface PetPlaceE2EState {
@@ -147,6 +147,30 @@ export async function installPetPlaceApiMock(page: Page, state: PetPlaceE2EState
   });
 
   await page.route('**/api/**', async (route) => handleApiRoute(route, state));
+}
+
+export async function expectImageLoaded(image: Locator) {
+  await expect(image).toBeVisible();
+  await expect.poll(async () => image.evaluate((element) => {
+    const img = element as HTMLImageElement;
+    const style = window.getComputedStyle(img);
+    return {
+      complete: img.complete,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+      opacity: style.opacity,
+    };
+  })).toMatchObject({
+    complete: true,
+    naturalWidth: expect.any(Number),
+    naturalHeight: expect.any(Number),
+    opacity: '1',
+  });
+  const size = await image.evaluate((element) => {
+    const img = element as HTMLImageElement;
+    return img.naturalWidth * img.naturalHeight;
+  });
+  expect(size).toBeGreaterThan(0);
 }
 
 async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
