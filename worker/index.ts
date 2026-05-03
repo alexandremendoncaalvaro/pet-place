@@ -445,8 +445,8 @@ async function findOrCreateGoogleUser(env: Env, info: { sub: string; email: stri
     await env.DB.prepare('UPDATE users SET google_sub = ?, updated_at = ? WHERE id = ?').bind(info.sub, now(), byEmail.id).run();
     return { ...rowToUser(byEmail), uid: byEmail.id };
   }
-  const bootstrapEmail = (env.BOOTSTRAP_ADMIN_EMAIL || 'peritto@gmail.com').toLowerCase();
-  const role: Role = info.email.toLowerCase() === bootstrapEmail ? 'admin' : 'resident';
+  const bootstrapEmail = (env.BOOTSTRAP_ADMIN_EMAIL || '').toLowerCase();
+  const role: Role = bootstrapEmail && info.email.toLowerCase() === bootstrapEmail ? 'admin' : 'resident';
   const status = role === 'admin' ? 'active' : 'pending';
   const userId = newId('usr');
   const createdAt = now();
@@ -1580,7 +1580,7 @@ async function signVapidJwt(env: Env, aud: string): Promise<string> {
   const payload = base64urlEncode(new TextEncoder().encode(JSON.stringify({
     aud,
     exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
-    sub: env.VAPID_SUBJECT || 'mailto:peritto@gmail.com',
+    sub: env.VAPID_SUBJECT || appUrl(env),
   })));
   const key = await importVapidPrivateKey(env.VAPID_PRIVATE_KEY || '');
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(`${header}.${payload}`));

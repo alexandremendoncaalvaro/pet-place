@@ -9,13 +9,13 @@ import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/ut
 import { useFeedback } from './Feedback';
 import { Badge, Button, Card, EmptyState, FieldLabel, Page, TextInput } from './ui';
 
-const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
+const DeletableUserButton = ({ u, currentUserId, deleteUserAndData }: { u: UserProfile, currentUserId?: string, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
   const { toast } = useFeedback();
 
-  if (u.email === 'peritto@gmail.com') {
+  if (u.uid === currentUserId) {
     return (
-      <Badge tone="brand" className="flex-1 justify-center rounded-lg uppercase tracking-wide">Owner</Badge>
+      <Badge tone="brand" className="flex-1 justify-center rounded-lg uppercase tracking-wide">Você</Badge>
     );
   }
 
@@ -93,7 +93,7 @@ export function AdminPanel() {
 }
 
 function AdminPanelContent() {
-  const { allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
+  const { user, allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
   const { confirm, toast } = useFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
@@ -281,7 +281,7 @@ function AdminPanelContent() {
                     {u.userStatus === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                   </button>
                 )}
-                <DeletableUserButton u={u} deleteUserAndData={deleteUserAndData} />
+                <DeletableUserButton u={u} currentUserId={user?.uid} deleteUserAndData={deleteUserAndData} />
               </div>
             </Card>
           ))}
@@ -546,9 +546,9 @@ function SettingsForm() {
           {loading ? 'Preparando ZIP...' : 'Baixar Dados e Mídias (ZIP)'}
         </button>
 
-        {user?.email === 'peritto@gmail.com' && (
+        {user?.role === 'admin' && (
           <div className="mt-4 pt-4 border-t border-gray-100">
-            <h4 className="text-xs font-semibold text-gray-700 mb-2">Opções do Owner 👑</h4>
+            <h4 className="text-xs font-semibold text-gray-700 mb-2">Opções administrativas</h4>
             <input
               type="file"
               accept=".zip"
