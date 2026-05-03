@@ -4,6 +4,7 @@ import { ptBR } from 'date-fns/locale';
 import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AppPost, PostComment } from '../lib/types';
+import { resolveMentionNotificationTargets } from '../lib/mentions';
 import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
@@ -100,20 +101,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     // Check if new tags were added
     const newTags = editTags.filter(t => !(post.tags || []).includes(t));
     if (newTags.length > 0 && user) {
-      const targetUids = new Set<string>();
-      newTags.forEach(tagId => {
-        const taggedUser = publicProfiles.find(p => p.uid === tagId);
-        if (taggedUser) {
-          targetUids.add(taggedUser.uid);
-        } else {
-          const taggedPet = allPets.find(p => p.id === tagId);
-          if (taggedPet) {
-            const owners = publicProfiles.filter(p => (p.familyId || p.uid) === taggedPet.familyId);
-            owners.forEach(o => targetUids.add(o.uid));
-          }
-        }
-      });
-      targetUids.delete(user.uid);
+      const targetUids = resolveMentionNotificationTargets(newTags, user.uid, publicProfiles, allPets);
       targetUids.forEach(uid => {
         addNotification({
           userId: uid,
