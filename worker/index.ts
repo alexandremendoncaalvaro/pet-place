@@ -1592,7 +1592,13 @@ async function importVapidPrivateKey(privateKey: string): Promise<CryptoKey> {
   const binary = trimmed.includes('BEGIN PRIVATE KEY')
     ? Uint8Array.from(atob(trimmed.replace(/-----BEGIN PRIVATE KEY-----/g, '').replace(/-----END PRIVATE KEY-----/g, '').replace(/\s/g, '')), (c) => c.charCodeAt(0))
     : base64urlDecode(trimmed);
-  return crypto.subtle.importKey('pkcs8', binary, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  return crypto.subtle.importKey('pkcs8', toArrayBuffer(binary), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 function derToJose(sig: Uint8Array): Uint8Array {
