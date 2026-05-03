@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign, FileVideo } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
+import { buildMentionEntities, filterMentionEntities, resolveMentionNotificationTargets, MentionEntity } from '../lib/mentions';
 import { classifyUploadMedia, createVideoPoster, getUploadMimeType, normalizeUploadFile, validateVideoForUpload } from '../services/uploads';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
@@ -24,8 +25,16 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const [isPreparingPoster, setIsPreparingPoster] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [postVideoPosterUrl, setPostVideoPosterUrl] = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const postFileKind = postFile ? classifyUploadMedia(postFile) : 'unknown';
+  const mentionEntities = React.useMemo(() => buildMentionEntities(publicProfiles, allPets, user?.uid), [publicProfiles, allPets, user?.uid]);
+  const mentionSuggestions = React.useMemo(
+    () => mentionQuery === null ? [] : filterMentionEntities(mentionEntities, mentionQuery, postTags),
+    [mentionEntities, mentionQuery, postTags],
+  );
   const postFilePreviewUrl = React.useMemo(
     () => postFile ? URL.createObjectURL(normalizeUploadFile(postFile, postFileKind)) : null,
     [postFile, postFileKind],
@@ -92,6 +101,48 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
     });
   };
 
+  const syncMentionQuery = (value: string, cursor: number) => {
+    const beforeCursor = value.slice(0, cursor);
+    const match = beforeCursor.match(/(^|\s)@([\p{L}\p{N}._-]{0,32})$/u);
+    if (!match) {
+      setMentionQuery(null);
+      setMentionStart(null);
+      return;
+    }
+    setMentionQuery(match[2]);
+    setMentionStart(cursor - match[2].length - 1);
+  };
+
+  const handleContentChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = event.target.value;
+    setPostContent(nextValue);
+    syncMentionQuery(nextValue, event.target.selectionStart);
+  };
+
+  const applyMention = (entity: MentionEntity) => {
+    const cursor = textareaRef.current?.selectionStart ?? postContent.length;
+    const start = mentionStart ?? cursor;
+    const beforeMention = postContent.slice(0, start);
+    const afterMention = postContent.slice(cursor);
+    const mentionLabel = `@${entity.name}`;
+    const nextValue = `${beforeMention}${mentionLabel} ${afterMention.replace(/^\s*/, '')}`;
+    const nextCursor = beforeMention.length + mentionLabel.length + 1;
+
+    setPostContent(nextValue);
+    setPostTags((current) => current.includes(entity.id) ? current : [...current, entity.id]);
+    setMentionQuery(null);
+    setMentionStart(null);
+
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  };
+
+  const toggleTag = (id: string) => {
+    setPostTags((current) => current.includes(id) ? current.filter((tag) => tag !== id) : [...current, id]);
+  };
+
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postFile) return;
     setIsPosting(true);
@@ -107,23 +158,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
       await addPost(postData, postFile || undefined);
 
       if (postTags.length > 0) {
-        const targetUids = new Set<string>();
-
-        postTags.forEach(tagId => {
-          const taggedUser = publicProfiles.find(p => p.uid === tagId);
-          if (taggedUser) {
-            targetUids.add(taggedUser.uid);
-          } else {
-            const taggedPet = allPets.find(p => p.id === tagId);
-            if (taggedPet) {
-              const owners = publicProfiles.filter(p => (p.familyId || p.uid) === taggedPet.familyId);
-              owners.forEach(o => targetUids.add(o.uid));
-            }
-          }
-        });
-
-        targetUids.delete(user!.uid);
-
+        const targetUids = resolveMentionNotificationTargets(postTags, user!.uid, publicProfiles, allPets);
         targetUids.forEach(uid => {
           addNotification({
             userId: uid,
@@ -166,12 +201,35 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
             <ImageWithSkeleton src={user?.photoUrl || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-10 h-10 rounded-full object-cover shrink-0" containerClassName="w-10 h-10 shrink-0 rounded-full" />
             <div className="flex-1">
               <textarea
+                ref={textareaRef}
                 autoFocus
                 placeholder="O que está acontecendo?"
                 className="w-full bg-transparent resize-none outline-none text-ink-900 placeholder-ink-400 text-lg min-h-[120px]"
                 value={postContent}
-                onChange={e => setPostContent(e.target.value)}
+                onChange={handleContentChange}
+                onKeyUp={(event) => syncMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
+                onClick={(event) => syncMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
               />
+
+              {mentionSuggestions.length > 0 && (
+                <div className="mb-3 overflow-hidden rounded-card border border-ink-100 bg-white shadow-card">
+                  {mentionSuggestions.map((entity) => (
+                    <button
+                      key={`${entity.kind}:${entity.id}`}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyMention(entity)}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-ink-50 active:bg-ink-100"
+                    >
+                      <MentionAvatar entity={entity} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-ink-900">{entity.name}</span>
+                        <span className="block text-xs text-ink-400">{entity.kind === 'pet' ? `Pet de ${entity.owner?.name || 'participante'}` : 'Pessoa'}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">
@@ -211,6 +269,26 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
                   {mediaError}
                 </div>
               )}
+
+              {postTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {postTags.map((tagId) => {
+                    const entity = mentionEntities.find((item) => item.id === tagId);
+                    if (!entity) return null;
+                    return (
+                      <button
+                        key={tagId}
+                        type="button"
+                        onClick={() => toggleTag(tagId)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700"
+                      >
+                        @{entity.name}
+                        <X size={12} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -218,21 +296,17 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
             <div className="mt-4 p-4 border rounded-2xl border-brand-100 bg-brand-50/50">
               <h4 className="text-xs font-semibold text-brand-700 uppercase tracking-wider mb-3">Marcar na publicação</h4>
               <div className="flex flex-wrap gap-2">
-                {[...publicProfiles, ...allPets].filter(p => !('uid' in p) || p.uid !== user?.uid).map(entity => {
-                  const id = 'uid' in entity ? entity.uid : (entity as any).id;
-                  const name = 'uid' in entity ? entity.name : (entity as any).name;
-                  const isSelected = postTags.includes(id);
+                {mentionEntities.map(entity => {
+                  const isSelected = postTags.includes(entity.id);
                   return (
                     <Badge
-                      key={id}
+                      key={entity.id}
                       as="button"
-                      onClick={() => {
-                        setPostTags(prev => isSelected ? prev.filter(t => t !== id) : [...prev, id]);
-                      }}
+                      onClick={() => toggleTag(entity.id)}
                       tone={isSelected ? 'brand' : 'neutral'}
                       className={`flex whitespace-nowrap items-center gap-1.5 border transition-colors ${isSelected ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-ink-700 border-ink-200'}`}
                     >
-                      {name}
+                      @{entity.name}
                     </Badge>
                   );
                 })}
@@ -284,4 +358,26 @@ function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function MentionAvatar({ entity }: { entity: MentionEntity }) {
+  const imageUrl = entity.kind === 'profile' ? entity.profile.photoUrl : entity.pet.photoUrl;
+  const fallback = entity.name.charAt(0).toUpperCase();
+
+  if (imageUrl) {
+    return (
+      <ImageWithSkeleton
+        src={imageUrl}
+        alt={entity.name}
+        className="h-9 w-9 rounded-full object-cover"
+        containerClassName="h-9 w-9 shrink-0 rounded-full"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-sm font-bold text-ink-500">
+      {fallback}
+    </span>
+  );
 }

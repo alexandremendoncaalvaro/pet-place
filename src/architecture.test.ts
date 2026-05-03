@@ -76,6 +76,21 @@ describe('project architecture guardrails', () => {
     expect(postItem).toContain('visibleCommentCount');
   });
 
+  it('keeps mention notifications family-aware for pets', () => {
+    const createPostModal = read('src/components/CreatePostModal.tsx');
+    const postItem = read('src/components/PostItem.tsx');
+    const mentions = read('src/lib/mentions.ts');
+
+    expect(createPostModal).toContain('applyMention');
+    expect(createPostModal).toContain('mentionSuggestions');
+    expect(createPostModal).toContain('resolveMentionNotificationTargets(postTags');
+    expect(postItem).toContain('resolveMentionNotificationTargets(newTags');
+    expect(mentions).toContain('const familyId = owner.familyId || owner.uid');
+    expect(mentions).toContain('targetUids.delete(actorUid)');
+    expect(createPostModal).not.toContain('taggedPet.familyId');
+    expect(postItem).not.toContain('taggedPet.familyId');
+  });
+
   it('cleans duplicate monthly placeholders before merging identity payments', () => {
     const worker = read('worker/index.ts');
     const duplicateCleanup = worker.indexOf("DELETE FROM payments\n        WHERE type = 'mensalidade'");
