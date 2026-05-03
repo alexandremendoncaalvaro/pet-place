@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pet Place">
+  <rect width="128" height="128" rx="28" fill="#2563eb"/>
+  <circle cx="42" cy="46" r="12" fill="#fff"/>
+  <circle cx="64" cy="36" r="12" fill="#fff"/>
+  <circle cx="86" cy="46" r="12" fill="#fff"/>
+  <circle cx="50" cy="72" r="12" fill="#fff"/>
+  <circle cx="78" cy="72" r="12" fill="#fff"/>
+  <path d="M42 83c0-17 44-17 44 0 0 13-10 22-22 22S42 96 42 83Z" fill="#fff"/>
+</svg>

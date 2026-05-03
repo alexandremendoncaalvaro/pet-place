@@ -1,58 +1,36 @@
-# Pre-cadastro e Junção por Telefone
+# Pre-cadastro e Juncao por Telefone
 
 ## Problema
 
-Algumas pessoas pagam pelo WhatsApp e nao querem entrar no app agora. O administrador precisa registrar o pagamento mesmo assim, sem perder a chance de vincular esses dados quando a pessoa entrar no futuro.
+Algumas pessoas pagam pelo WhatsApp e nao querem entrar no app agora. O administrador precisa registrar o pagamento mesmo assim, com comprovante e transparencia no caixa.
 
 ## Principio
 
-Nunca juntar contas automaticamente. Telefone e um forte indício, mas a juncao afeta historico financeiro. O sistema deve sugerir a juncao e exigir aprovacao administrativa.
+Nunca juntar contas automaticamente. Telefone e um forte indicio, mas a juncao afeta historico financeiro. O sistema sugere a juncao e exige aprovacao administrativa.
 
-## Modelo Proposto
+## Implementacao Atual
 
-Adicionar um tipo de usuario pre-cadastrado:
+- Admin pode registrar pagamento externo na aba `Admin > Pessoas`.
+- O registro pode usar uma pessoa existente ou criar uma pessoa offline com nome, telefone e pet opcional.
+- Pessoas offline usam `users.is_offline = 1`, `user_status = 'active'` e email interno `offline+...@pet-place.local`.
+- Pagamentos externos entram em `payments` com comprovante em R2 e `status = 'approved'`, aparecendo imediatamente na transparencia.
+- Para mensalidade, se ja existir cobranca do mesmo mes para aquela pessoa/familia, o Worker atualiza a cobranca existente em vez de criar duplicada.
+- Quando uma conta real salva um telefone igual ao de uma pessoa offline, o Worker cria uma linha em `identity_link_suggestions`.
+- Admin ve sugestoes pendentes em `Admin > Pessoas` e pode aprovar ou recusar.
 
-- `user_status = 'pre_registered'` ou uma coluna `source = 'admin_created'`.
-- `email` pode ser placeholder interno, mas nao deve ser usado para login.
-- `phone` deve ser obrigatorio e normalizado.
-- pagamentos/comprovantes podem apontar para esse `users.id` como `family_id`.
+## O Que Acontece Ao Aprovar
 
-Quando alguem logar com Google:
-
-1. O Worker cria ou encontra o usuario Google normalmente.
-2. Se o usuario informar telefone no perfil, o backend normaliza.
-3. O backend procura pre-cadastros ativos com o mesmo telefone.
-4. Se encontrar, cria uma sugestao de juncao pendente para admins.
-5. Admin aprova ou rejeita.
-6. Ao aprovar, o sistema move pagamentos, pets e historico do pre-cadastro para a conta Google, preservando auditoria.
-
-## Tabelas Recomendadas
-
-`identity_link_suggestions`
-
-- `id`
-- `candidate_user_id`: usuario Google real.
-- `pre_registered_user_id`: usuario criado por admin.
-- `phone`
-- `status`: `pending`, `approved`, `rejected`
-- `created_at`
-- `reviewed_by`
-- `reviewed_at`
+1. `payments.family_id` da pessoa offline e movido para a familia/conta real.
+2. Pets cadastrados na pessoa offline sao movidos para a conta real.
+3. Se a conta real ainda nao tiver pet preenchido, herda o nome do pet offline.
+4. A pessoa offline e bloqueada para nao aparecer como ativa.
+5. Mensalidades pendentes/rejeitadas duplicadas sao removidas quando ja existe mensalidade aprovada para o mesmo mes.
+6. A sugestao fica marcada como `approved`.
 
 ## Regras
 
-- Um telefone normalizado nao deve gerar varias sugestoes abertas para o mesmo par.
-- Admin deve ver nome, telefone, pagamentos e comprovantes antes de aprovar.
-- A aprovacao deve ser transacional no D1.
-- Historico financeiro nunca deve ser apagado; apenas reassociado.
-- Rejeicao deve impedir nova sugestao automatica para o mesmo par, a menos que um admin reabra.
-
-## MVP Seguro
-
-1. Adicionar pre-cadastro admin com nome e telefone.
-2. Permitir admin anexar comprovante e marcar mensalidade como paga para pre-cadastro.
-3. Ao usuario real salvar telefone, gerar sugestao de juncao.
-4. Tela admin lista sugestoes.
-5. Admin aprova e o Worker reassocia `payments.family_id`.
-
-Esse fluxo resolve o caso WhatsApp sem obrigar entrada no app e sem risco de juntar pessoas erradas automaticamente.
+- Telefone deve ser normalizado no formato nacional sem `+55`.
+- Um par de usuarios nao deve ter multiplas sugestoes abertas iguais.
+- Rejeitar uma sugestao nao move dados.
+- Historico financeiro aprovado nao e apagado; ele e reassociado.
+- Merge automatico continua proibido.

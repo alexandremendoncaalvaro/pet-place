@@ -18,6 +18,7 @@ self.addEventListener('notificationclick', (event) => {
 async function showLatestNotification() {
   let title = 'Caixinha Pet Place';
   let body = 'Você tem uma nova atualização.';
+  let tag = 'caixinha-notification';
 
   try {
     const response = await fetch('/api/notifications/latest', { credentials: 'include' });
@@ -26,6 +27,7 @@ async function showLatestNotification() {
       if (data.notification) {
         title = data.notification.title || title;
         body = data.notification.message || body;
+        tag = data.notification.aggregationKey || data.notification.id || tag;
       }
     }
   } catch (error) {
@@ -34,10 +36,10 @@ async function showLatestNotification() {
 
   await self.registration.showNotification(title, {
     body,
-    icon: '/vite.svg',
-    badge: '/vite.svg',
+    icon: '/icon.svg',
+    badge: '/icon.svg',
     vibrate: [200, 100, 200],
-    tag: 'caixinha-notification',
+    tag,
     renotify: true,
   });
 }

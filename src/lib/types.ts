@@ -11,6 +11,7 @@ export interface UserProfile {
   email: string;
   familyId?: string;
   userStatus?: 'pending' | 'active' | 'blocked';
+  isOffline?: boolean;
   createdAt: string;
 }
 
@@ -77,8 +78,10 @@ export interface AppPost {
   authorId: string;
   content: string;
   mediaUrl?: string;
+  posterUrl?: string;
   mediaType?: 'image' | 'video';
   likedBy: string[];
+  commentCount?: number;
   tags?: string[];
   createdAt: string;
 }
@@ -98,4 +101,25 @@ export interface AppNotification {
   message: string;
   isRead: boolean;
   createdAt: string;
+  type?: 'generic' | 'post_comment' | 'post_like' | 'payment' | 'event' | 'mention';
+  actorId?: string;
+  entityType?: 'post' | 'payment' | 'event' | 'comment';
+  entityId?: string;
+  aggregationKey?: string;
+  count?: number;
+  data?: Record<string, unknown>;
+}
+
+export interface IdentityLinkSuggestion {
+  id: string;
+  sourceUserId: string;
+  sourceName: string;
+  sourcePhone: string;
+  targetUserId: string;
+  targetName: string;
+  targetPhone: string;
+  phone: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  resolvedAt?: string;
 }

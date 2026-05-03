@@ -20,6 +20,14 @@ database_id = "7ce089cf-92b6-4822-ac50-5cdbaf3cf3f8"
 binding = "MEDIA"
 bucket_name = "caixinha-pet-media"
 
+[[durable_objects.bindings]]
+name = "REALTIME"
+class_name = "RealtimeHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeHub"]
+
 [vars]
 APP_URL = "https://pet-place.pages.dev"
 BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
@@ -54,6 +62,10 @@ database_id = "7ce089cf-92b6-4822-ac50-5cdbaf3cf3f8"
 binding = "MEDIA"
 bucket_name = "caixinha-pet-media"
 
+[[env.production.durable_objects.bindings]]
+name = "REALTIME"
+class_name = "RealtimeHub"
+
 [env.production.vars]
 APP_URL = "https://pet-place.pages.dev"
 BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
@@ -80,6 +92,10 @@ database_id = "02f66aa6-e483-4ca0-a49b-9b5889d95946"
 [[env.dev.r2_buckets]]
 binding = "MEDIA"
 bucket_name = "caixinha-pet-media-dev"
+
+[[env.dev.durable_objects.bindings]]
+name = "REALTIME"
+class_name = "RealtimeHub"
 
 [env.dev.vars]
 APP_URL = "https://pet-place-dev.pages.dev"

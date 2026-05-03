@@ -1,42 +1,45 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup } from '../services/api';
-import { Payment, UserProfile, AppEvent } from '../lib/types';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup, createOfflineUser, createManualPayment, resolveIdentityLinkSuggestion } from '../services/api';
+import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
+import { useFeedback } from './Feedback';
+import { Badge, Button, Card, EmptyState, FieldLabel, Page, TextInput } from './ui';
 
 const DeletableUserButton = ({ u, deleteUserAndData }: { u: UserProfile, deleteUserAndData: (id: string) => Promise<void> }) => {
   const [confirming, setConfirming] = useState(false);
-  
+  const { toast } = useFeedback();
+
   if (u.email === 'peritto@gmail.com') {
     return (
-      <div className="flex-1 text-[10px] bg-blue-50 text-blue-700 py-1.5 rounded-lg font-bold text-center uppercase tracking-wide border border-blue-100">
-        👑 Owner
-      </div>
+      <Badge tone="brand" className="flex-1 justify-center rounded-lg uppercase tracking-wide">Owner</Badge>
     );
   }
-  
+
   if (confirming) {
     return (
       <div className="flex-1 flex gap-1 animate-in zoom-in-95">
-        <button onClick={() => setConfirming(false)} className="flex-1 text-[10px] bg-gray-100 text-gray-600 py-1.5 rounded-lg border border-gray-200">Cancelar</button>
-        <button onClick={async () => {
+        <Button onClick={() => setConfirming(false)} variant="secondary" size="sm" className="flex-1 text-[10px]">Cancelar</Button>
+        <Button onClick={async () => {
           await deleteUserAndData(u.uid);
-          alert('Dados apagados.');
-        }} className="flex-1 text-[10px] bg-red-500 text-white py-1.5 rounded-lg active:bg-red-600 shadow-sm">Sim, Excluir</button>
+          toast('Dados apagados.');
+        }} variant="danger" size="sm" className="flex-1 bg-danger-600 text-white text-[10px]">Sim, Excluir</Button>
       </div>
     );
   }
   return (
-    <button 
+    <Button
       onClick={() => setConfirming(true)}
-      className="flex-1 text-[10px] bg-red-50 text-red-600 py-1.5 rounded-lg font-medium transition-colors hover:bg-red-100"
+      variant="danger"
+      size="sm"
+      className="flex-1 text-[10px]"
       title="Excluir Dados (LGPD)"
     >
       Excluir (LGPD)
-    </button>
+    </Button>
   );
 };
 
@@ -45,33 +48,33 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
   const residentCount = allUsers.filter(u => u.role === 'resident').length;
   const readCount = evt.readBy?.length || 0;
   const isEvent = evt.type === 'event';
-  
+
   return (
-    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50 flex flex-col gap-2">
+    <Card tone="muted" className="p-4 flex flex-col gap-2 shadow-none">
       <div className="flex justify-between items-start">
         <div>
-          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${isEvent ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+          <Badge tone={isEvent ? 'warning' : 'brand'} className="text-[10px] uppercase tracking-wider px-2 py-0.5">
             {isEvent ? 'Evento' : 'Aviso'}
-          </span>
-          <h4 className="text-sm font-semibold text-gray-800 mt-1">{evt.title}</h4>
+          </Badge>
+          <h4 className="text-sm font-semibold text-ink-900 mt-1">{evt.title}</h4>
         </div>
-        
+
         {confirming ? (
-          <div className="flex items-center gap-1 bg-red-50 p-1 rounded-lg origin-top-right animate-in zoom-in-95">
-             <span className="text-[10px] text-red-600 font-medium px-1">Excluir?</span>
-             <button onClick={() => setConfirming(false)} className="text-[10px] bg-white px-2 py-1 rounded text-gray-600 shadow-sm border border-gray-200">Não</button>
-             <button onClick={async () => {
+          <div className="flex items-center gap-1 bg-danger-50 p-1 rounded-lg origin-top-right animate-in zoom-in-95">
+             <span className="text-[10px] text-danger-600 font-medium px-1">Excluir?</span>
+             <Button onClick={() => setConfirming(false)} variant="secondary" size="sm" className="h-6 px-2 text-[10px] bg-white">Não</Button>
+             <Button onClick={async () => {
                await deleteEvent(evt.id);
-             }} className="text-[10px] bg-red-500 px-2 py-1 rounded text-white shadow-sm">Sim</button>
+             }} variant="danger" size="sm" className="h-6 px-2 text-[10px] bg-danger-600 text-white">Sim</Button>
           </div>
         ) : (
-          <button className="text-gray-400 hover:text-red-500 transition-colors p-1" onClick={() => setConfirming(true)}>
+          <button className="text-ink-400 hover:text-danger-600 transition-colors p-1" onClick={() => setConfirming(true)}>
             <XCircle size={16} />
           </button>
         )}
       </div>
-      
-      <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+
+      <div className="flex items-center gap-4 text-xs text-ink-500 mt-2">
         <span className="flex items-center gap-1" title="Visualizações">
           <Eye size={14} /> {readCount} / {residentCount}
         </span>
@@ -81,66 +84,83 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
           </span>
         )}
       </div>
-    </div>
+    </Card>
   );
 };
 
 export function AdminPanel() {
-  const { allPayments, allUsers, appConfig } = useApp();
+  return <AdminPanelContent />;
+}
+
+function AdminPanelContent() {
+  const { allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
+  const { confirm, toast } = useFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
 
   return (
-    <div className="p-6 max-w-lg mx-auto pb-24 space-y-6">
-      
+    <Page className="space-y-6">
+
       {/* Tab Switcher */}
-      <div className="bg-gray-200/50 p-1 rounded-2xl flex flex-wrap gap-1">
-        <button 
+      <div className="bg-ink-100 p-1 rounded-2xl flex flex-wrap gap-1">
+        <Button
           onClick={() => setTab('approvals')}
-          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'approvals' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'approvals' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'approvals' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Caixa
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setTab('expense')}
-          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'expense' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'expense' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Despesa
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setTab('rateio')}
-          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'rateio' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'rateio' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'rateio' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Rateio
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setTab('users')}
-          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'users' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'users' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'users' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Pessoas
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setTab('comms')}
-          className={`flex-1 min-w-[30%] py-2 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'comms' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'comms' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'comms' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Avisos
-        </button>
-        <button 
+        </Button>
+        <Button
           onClick={() => setTab('settings')}
-          className={`flex-1 min-w-[30%] py-2 px-1 text-xs sm:text-sm font-medium rounded-xl transition-all ${tab === 'settings' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}
+          variant={tab === 'settings' ? 'primary' : 'ghost'}
+          className={`flex-1 min-w-[30%] shadow-none ${tab === 'settings' ? 'bg-white text-ink-900 hover:bg-white' : 'text-ink-500'}`}
+          size="sm"
         >
           Ajustes
-        </button>
+        </Button>
       </div>
 
       {tab === 'approvals' && (
         <div className="space-y-6">
           <div>
-            <h3 className="font-semibold text-gray-800 text-lg mb-3">Aguardando Avaliação</h3>
+            <h3 className="font-semibold text-ink-900 text-lg mb-3">Aguardando Avaliação</h3>
             {allPayments.filter(p => p.status === 'analyzing').length === 0 ? (
-               <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-3xl border border-gray-100">
+               <EmptyState className="py-6">
                  Tudo limpo! Nenhuma pendência para analisar.
-               </div>
+               </EmptyState>
             ) : (
               <div className="space-y-4">
                 {allPayments.filter(p => p.status === 'analyzing').map(payment => {
@@ -152,11 +172,11 @@ export function AdminPanel() {
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-800 text-lg mb-3">Cobranças Pendentes</h3>
+            <h3 className="font-semibold text-ink-900 text-lg mb-3">Cobranças Pendentes</h3>
             {allPayments.filter(p => p.status === 'pending').length === 0 ? (
-               <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-3xl border border-gray-100">
+               <EmptyState className="py-6">
                  Nenhuma cobrança pendente.
-               </div>
+               </EmptyState>
             ) : (
               <div className="space-y-4">
                 {allPayments.filter(p => p.status === 'pending').map(payment => {
@@ -174,21 +194,23 @@ export function AdminPanel() {
 
       {tab === 'users' && (
         <div className="space-y-4">
-          <h3 className="font-semibold text-gray-800 text-lg mb-2">Pessoas ({allUsers.length})</h3>
+          <ManualPaymentForm allUsers={allUsers} />
+          <IdentityLinkSuggestionsPanel suggestions={identityLinkSuggestions} />
+          <h3 className="font-semibold text-ink-900 text-lg mb-2">Pessoas ({allUsers.length})</h3>
           {allUsers.map(u => (
-            <div key={u.uid} className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col gap-3 shadow-sm">
+            <Card key={u.uid} className="rounded-2xl p-4 flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-800 text-sm">{u.name}</p>
-                    {u.userStatus === 'pending' && <span className="text-[10px] uppercase font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Pendente</span>}
-                    {u.userStatus === 'blocked' && <span className="text-[10px] uppercase font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Bloqueado</span>}
-                    {u.userStatus === 'active' && <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Ativo</span>}
+                    <p className="font-medium text-ink-900 text-sm">{u.name}</p>
+                    {u.userStatus === 'pending' && <Badge tone="warning" className="rounded text-[10px] uppercase px-1.5 py-0.5">Pendente</Badge>}
+                    {u.userStatus === 'blocked' && <Badge tone="danger" className="rounded text-[10px] uppercase px-1.5 py-0.5">Bloqueado</Badge>}
+                    {u.userStatus === 'active' && <Badge tone="success" className="rounded text-[10px] uppercase px-1.5 py-0.5">Ativo</Badge>}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                    Contato: 
+                  <div className="text-xs text-ink-500 mt-0.5 flex items-center gap-1">
+                    Contato:
                     {editingPhoneUid === u.uid ? (
-                      <form 
+                      <form
                         className="flex items-center gap-1 inline-flex"
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -204,17 +226,17 @@ export function AdminPanel() {
                            inputMode="tel"
                            autoComplete="tel-national"
                            maxLength={15}
-                           className="border border-gray-300 rounded px-1 py-0.5 w-32 text-[10px]"
+                          className="border border-ink-200 rounded px-1 py-0.5 w-32 text-[10px]"
                            autoFocus
                          />
-                         <button type="submit" className="text-emerald-500 bg-emerald-50 px-1 py-0.5 rounded text-[10px]">OK</button>
+                         <button type="submit" className="text-success-600 bg-success-50 px-1 py-0.5 rounded text-[10px]">OK</button>
                       </form>
                     ) : (
                       <>
                         {formatPhoneBR(u.phone) || '-'}
-                        <button 
+                        <button
                           onClick={() => setEditingPhoneUid(u.uid)}
-                          className="ml-1 text-blue-500 hover:text-blue-700 transition-colors p-1"
+                          className="ml-1 text-brand-500 hover:text-brand-700 transition-colors p-1"
                           title="Editar telefone"
                         >
                           <Edit3 size={12} />
@@ -223,39 +245,45 @@ export function AdminPanel() {
                     )}
                   </div>
                 </div>
-                <button 
-                  onClick={() => {
+                <button
+                  onClick={async () => {
                     const isAdmin = u.role === 'admin';
                     const nextRole = isAdmin ? 'resident' : 'admin';
-                    if (!confirm(`Alterar ${u.name} para ${nextRole === 'admin' ? 'Admin' : 'Pessoa'}?`)) return;
-                    updateProfile(u.uid, { role: isAdmin ? 'resident' : 'admin' });
+                    const confirmed = await confirm({
+                      title: 'Alterar papel',
+                      message: `Alterar ${u.name} para ${nextRole === 'admin' ? 'Admin' : 'Pessoa'}?`,
+                      confirmLabel: 'Alterar',
+                    });
+                    if (!confirmed) return;
+                    await updateProfile(u.uid, { role: nextRole });
+                    toast('Papel atualizado.');
                   }}
-                  className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}
+                  className={`text-xs px-2 py-1 rounded-md font-medium ${u.role === 'admin' ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'}`}
                   title="Alterar papel"
                 >
                   {u.role === 'admin' ? 'Admin' : 'Pessoa'}
                 </button>
               </div>
-              <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+              <div className="flex items-center gap-2 pt-2 border-t border-ink-100">
                 {u.userStatus === 'pending' && (
-                  <button 
+                  <button
                     onClick={() => updateProfile(u.uid, { userStatus: 'active' })}
-                    className="flex-1 text-xs bg-emerald-500 active:bg-emerald-600 text-white py-1.5 rounded-lg font-medium transition-colors"
+                    className="flex-1 text-xs bg-success-600 active:bg-success-600 text-white py-1.5 rounded-lg font-medium transition-colors"
                   >
                     Aprovar Acesso
                   </button>
                 )}
                 {u.userStatus !== 'pending' && (
-                  <button 
+                  <button
                     onClick={() => updateProfile(u.uid, { userStatus: u.userStatus === 'blocked' ? 'active' : 'blocked' })}
-                    className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors ${u.userStatus === 'blocked' ? 'bg-amber-100 text-amber-700 active:bg-amber-200' : 'bg-orange-100 text-orange-700 active:bg-orange-200'}`}
+                    className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors ${u.userStatus === 'blocked' ? 'bg-warning-100 text-warning-600 active:bg-warning-100' : 'bg-warning-100 text-warning-600 active:bg-warning-100'}`}
                   >
                     {u.userStatus === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                   </button>
                 )}
                 <DeletableUserButton u={u} deleteUserAndData={deleteUserAndData} />
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -264,12 +292,154 @@ export function AdminPanel() {
 
       {tab === 'settings' && <SettingsForm />}
 
-    </div>
+    </Page>
+  );
+}
+
+function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
+  const { toast } = useFeedback();
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [dogName, setDogName] = useState('');
+  const [amount, setAmount] = useState('25');
+  const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [type, setType] = useState<NonNullable<Payment['type']>>('mensalidade');
+  const [description, setDescription] = useState('Comprovante recebido pelo WhatsApp');
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const activeUsers = allUsers.filter((user) => user.userStatus !== 'blocked');
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!file) {
+      toast('Anexe o comprovante recebido.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      let familyId = selectedUserId;
+      if (!familyId) {
+        const offlineUser = await createOfflineUser({ name, phone: normalizePhoneBR(phone), dogName });
+        familyId = offlineUser.uid;
+      }
+      await createManualPayment({
+        familyId,
+        amount: Number(amount || 0),
+        month,
+        type,
+        description,
+      }, file);
+      toast('Pessoa e comprovante registrados no caixa.');
+      setName('');
+      setPhone('');
+      setDogName('');
+      setAmount('25');
+      setDescription('Comprovante recebido pelo WhatsApp');
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = '';
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao registrar comprovante.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card as="form" onSubmit={handleSubmit} tone="brand" className="p-5 space-y-4">
+      <div>
+        <h3 className="font-semibold text-ink-900 text-lg">Registrar pagamento externo</h3>
+        <p className="text-xs text-ink-500 mt-1">Use para comprovantes enviados pelo WhatsApp, sem obrigar a pessoa a entrar no app.</p>
+      </div>
+
+      <div>
+        <FieldLabel>Pessoa existente</FieldLabel>
+        <select
+          value={selectedUserId}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+          className="w-full bg-white border border-ink-200 rounded-control px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+        >
+          <option value="">Cadastrar nova pessoa offline</option>
+          {activeUsers.map((user) => (
+            <option key={user.uid} value={user.familyId || user.uid}>{user.name} {user.isOffline ? '(offline)' : ''}</option>
+          ))}
+        </select>
+      </div>
+
+      {!selectedUserId && (
+        <div className="grid grid-cols-1 gap-3">
+          <TextInput required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome da pessoa" className="bg-white text-sm" />
+          <TextInput required value={phone} onChange={(event) => setPhone(formatPhoneBR(event.target.value))} placeholder={PHONE_BR_PLACEHOLDER} inputMode="tel" autoComplete="tel-national" maxLength={15} className="bg-white text-sm" />
+          <TextInput value={dogName} onChange={(event) => setDogName(event.target.value)} placeholder="Nome do pet (opcional)" className="bg-white text-sm" />
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <TextInput required type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="bg-white text-sm" />
+        <TextInput required type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="bg-white text-sm" />
+      </div>
+
+      <select value={type} onChange={(event) => setType(event.target.value as NonNullable<Payment['type']>)} className="w-full bg-white border border-ink-200 rounded-control px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm">
+        <option value="mensalidade">Mensalidade</option>
+        <option value="doacao">Doação</option>
+        <option value="rateio">Rateio</option>
+      </select>
+
+      <TextInput value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" className="bg-white text-sm" />
+
+      <Button type="button" onClick={() => fileRef.current?.click()} variant="ghost" className="w-full bg-white text-brand-600">
+        <Receipt size={18} className="mr-2" /> {file ? file.name : 'Anexar comprovante'}
+      </Button>
+      <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+
+      <Button disabled={loading} type="submit" className="w-full">
+        {loading ? <Loader2 size={18} className="animate-spin" /> : <><Plus size={18} className="mr-2" /> Registrar no caixa</>}
+      </Button>
+    </Card>
+  );
+}
+
+function IdentityLinkSuggestionsPanel({ suggestions }: { suggestions: IdentityLinkSuggestion[] }) {
+  const { toast } = useFeedback();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const pending = suggestions.filter((suggestion) => suggestion.status === 'pending');
+  if (!pending.length) return null;
+
+  const resolve = async (id: string, status: 'approved' | 'rejected') => {
+    setLoadingId(id);
+    try {
+      await resolveIdentityLinkSuggestion(id, status);
+      toast(status === 'approved' ? 'Vínculo aprovado e dados reunidos.' : 'Sugestão recusada.');
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao resolver vínculo.', 'error');
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  return (
+    <Card tone="muted" className="bg-warning-50 border-warning-100 p-5 space-y-3">
+      <h3 className="font-semibold text-warning-600 text-sm">Sugestões de vínculo por telefone</h3>
+      {pending.map((suggestion) => (
+        <Card key={suggestion.id} className="rounded-2xl p-3 border-warning-100 shadow-none">
+          <p className="text-sm text-ink-900">
+            <strong>{suggestion.sourceName}</strong> parece ser <strong>{suggestion.targetName}</strong>
+          </p>
+          <p className="text-xs text-ink-500 mt-1">Telefone: {formatPhoneBR(suggestion.phone)}</p>
+          <div className="flex gap-2 mt-3">
+            <Button disabled={loadingId === suggestion.id} onClick={() => resolve(suggestion.id, 'rejected')} variant="secondary" size="sm" className="flex-1">Recusar</Button>
+            <Button disabled={loadingId === suggestion.id} onClick={() => resolve(suggestion.id, 'approved')} variant="success" size="sm" className="flex-1">Juntar dados</Button>
+          </div>
+        </Card>
+      ))}
+    </Card>
   );
 }
 
 function SettingsForm() {
   const { appConfig, user } = useApp();
+  const { confirm, toast } = useFeedback();
   const [pixKey, setPixKey] = useState(appConfig?.pixKey || '');
   const [monthlyAmount, setMonthlyAmount] = useState(appConfig?.monthlyAmount?.toString() ?? '30');
   const [dueDateDay, setDueDateDay] = useState(appConfig?.dueDateDay?.toString() ?? '10');
@@ -280,21 +450,21 @@ function SettingsForm() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await updateConfig({ 
-      pixKey, 
+    await updateConfig({
+      pixKey,
       monthlyAmount: parseFloat(monthlyAmount) || 0,
       dueDateDay: parseInt(dueDateDay, 10) || 1,
       paymentInstructions
     });
     setLoading(false);
-    alert('Configurações salvas!');
+    toast('Configurações salvas.');
   };
 
   return (
     <form onSubmit={handleSave} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Chave Pix (Recebedor)</label>
-        <input 
+        <input
           required
           value={pixKey}
           onChange={e => setPixKey(e.target.value)}
@@ -304,7 +474,7 @@ function SettingsForm() {
       </div>
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Valor Mensalidade (R$)</label>
-        <input 
+        <input
           required
           type="number"
           step="0.01"
@@ -315,7 +485,7 @@ function SettingsForm() {
       </div>
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Dia de Vencimento</label>
-        <input 
+        <input
           required
           type="number"
           min="1"
@@ -327,7 +497,7 @@ function SettingsForm() {
       </div>
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Instruções de Pagamento</label>
-        <textarea 
+        <textarea
           value={paymentInstructions}
           onChange={e => setPaymentInstructions(e.target.value)}
           rows={3}
@@ -335,7 +505,7 @@ function SettingsForm() {
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-600 resize-none"
         />
       </div>
-      <button 
+      <button
         disabled={loading}
         type="submit"
         className="w-full mt-4 bg-gray-900 active:bg-black text-white py-4 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
@@ -348,7 +518,7 @@ function SettingsForm() {
         <p className="text-xs text-gray-500 mb-4 leading-relaxed">
           O backup é importante e deu. Salve este arquivo num local seguro, como o seu Google Drive, para usarmos como checkpoint de restauração caso necessário.
         </p>
-        <button 
+        <button
           type="button"
           disabled={loading}
           onClick={async () => {
@@ -366,7 +536,7 @@ function SettingsForm() {
                 URL.revokeObjectURL(url);
               }
             } catch (err: any) {
-              alert('Erro ao exportar backup: ' + (err?.message || err));
+              toast('Erro ao exportar backup: ' + (err?.message || err), 'error');
             } finally {
               setLoading(false);
             }
@@ -375,31 +545,37 @@ function SettingsForm() {
         >
           {loading ? 'Preparando ZIP...' : 'Baixar Dados e Mídias (ZIP)'}
         </button>
-        
+
         {user?.email === 'peritto@gmail.com' && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <h4 className="text-xs font-semibold text-gray-700 mb-2">Opções do Owner 👑</h4>
-            <input 
-              type="file" 
-              accept=".zip" 
-              className="hidden" 
+            <input
+              type="file"
+              accept=".zip"
+              className="hidden"
               ref={restoreFileRef}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (!confirm("Isso irá restaurar todos os dados e imagens do arquivo ZIP no banco de dados. Deseja continuar?")) return;
+                const confirmed = await confirm({
+                  title: 'Restaurar backup',
+                  message: 'Isso irá restaurar todos os dados e imagens do arquivo ZIP no banco de dados. Deseja continuar?',
+                  confirmLabel: 'Restaurar',
+                  variant: 'danger',
+                });
+                if (!confirmed) return;
                 setLoading(true);
                 try {
                   await restoreZippedBackup(file);
                 } catch (err: any) {
-                  alert('Erro na restauração: ' + (err?.message || err));
+                  toast('Erro na restauração: ' + (err?.message || err), 'error');
                 } finally {
                   setLoading(false);
                   if (restoreFileRef.current) restoreFileRef.current.value = '';
                 }
               }}
             />
-            <button 
+            <button
               type="button"
               disabled={loading}
               onClick={() => restoreFileRef.current?.click()}
@@ -416,6 +592,8 @@ function SettingsForm() {
 
 const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payment, userName }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const { toast } = useFeedback();
+  const { setFullscreenImage } = useApp();
 
   const handleAction = async (action: 'approve' | 'reject') => {
     try {
@@ -426,7 +604,7 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
         await rejectPayment(payment.id);
       }
     } catch (err) {
-      alert("Erro ao processar pagamento. Tente novamente.");
+      toast('Erro ao processar pagamento. Tente novamente.', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -446,18 +624,32 @@ const ApprovalCard: React.FC<{ payment: Payment, userName?: string }> = ({ payme
           R$ {payment.amount.toFixed(2)}
         </span>
       </div>
-      
-      <ImageWithSkeleton src={payment.proofUrl} alt="Comprovante" className="w-full h-48 object-cover border border-gray-100" containerClassName="w-full h-48 rounded-2xl mb-4 overflow-hidden" />
-      
+
+      {payment.proofUrl && (
+        <button
+          type="button"
+          onClick={() => setFullscreenImage({ url: payment.proofUrl!, title: `Comprovante: ${userName || 'Pagamento'}` })}
+          className="w-full h-48 rounded-2xl mb-4 overflow-hidden block text-left transition-transform active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="Abrir comprovante em tela cheia"
+        >
+          <ImageWithSkeleton
+            src={payment.proofUrl}
+            alt="Comprovante"
+            className="w-full h-48 object-cover border border-gray-100 cursor-zoom-in"
+            containerClassName="w-full h-48 rounded-2xl overflow-hidden"
+          />
+        </button>
+      )}
+
       <div className="flex gap-2">
-        <button 
+        <button
           disabled={isProcessing}
           onClick={() => handleAction('reject')}
           className="flex-1 bg-red-50 text-red-600 py-3 rounded-xl font-medium flex items-center justify-center transition-transform active:scale-95 disabled:opacity-50"
         >
           {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <><XCircle size={18} className="mr-2" /> Recusar</>}
         </button>
-        <button 
+        <button
           disabled={isProcessing}
           onClick={() => handleAction('approve')}
           className="flex-1 bg-emerald-50 text-emerald-600 py-3 rounded-xl font-medium flex items-center justify-center transition-transform active:scale-95 disabled:opacity-50"
@@ -473,14 +665,15 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useFeedback();
 
   const handleUpload = async (file: File) => {
     try {
       setIsProcessing(true);
       await uploadProofAndSubmit(payment.id, file);
-      alert("Comprovante anexado! A cobrança foi movida para Avaliação.");
+      toast('Comprovante anexado. A cobrança foi movida para avaliação.');
     } catch (err) {
-      alert("Erro ao enviar comprovante.");
+      toast('Erro ao enviar comprovante.', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -510,7 +703,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
                    try {
                      await deletePayment(payment.id);
                    } catch (e: any) {
-                     alert(e.message || 'Erro');
+                     toast(e.message || 'Erro ao excluir cobrança.', 'error');
                    } finally {
                      setIsProcessing(false);
                      setConfirmingDelete(false);
@@ -519,7 +712,7 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
               </div>
             </div>
           ) : (
-            <button 
+            <button
               disabled={isProcessing}
               onClick={() => setConfirmingDelete(true)}
               className="text-gray-400 hover:text-red-500 transition-colors p-1"
@@ -531,21 +724,21 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
         </div>
       </div>
 
-      <button 
+      <button
         disabled={isProcessing}
         onClick={() => fileRef.current?.click()}
         className="w-full bg-gray-50 text-gray-600 py-3 rounded-xl font-medium flex items-center justify-center transition-transform active:scale-95 disabled:opacity-50"
       >
         {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <><Receipt size={18} className="mr-2" /> Anexar Comprovante do Morador</>}
       </button>
-      <input 
-        ref={fileRef} 
-        type="file" 
-        accept="image/*" 
-        className="hidden" 
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
         onChange={(e) => {
           if (e.target.files?.[0]) handleUpload(e.target.files[0]);
-        }} 
+        }}
       />
     </div>
   );
@@ -553,16 +746,17 @@ const PendingChargeCard: React.FC<{ payment: Payment, userName?: string }> = ({ 
 
 function ExpenseForm() {
   const { user } = useApp();
+  const { toast } = useFeedback();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      alert("Por favor, anexe o comprovante.");
+      toast('Por favor, anexe o comprovante.', 'error');
       return;
     }
     setLoading(true);
@@ -575,7 +769,7 @@ function ExpenseForm() {
       createdAt: new Date().toISOString()
     }, file);
     setLoading(false);
-    alert('Despesa lançada com sucesso!');
+    toast('Despesa lançada com sucesso.');
     setTitle('');
     setAmount('');
     setFile(null);
@@ -585,7 +779,7 @@ function ExpenseForm() {
     <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">O que foi comprado?</label>
-        <input 
+        <input
           required
           value={title}
           onChange={e => setTitle(e.target.value)}
@@ -595,7 +789,7 @@ function ExpenseForm() {
       </div>
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Valor (R$)</label>
-        <input 
+        <input
           required
           type="number"
           step="0.01"
@@ -610,7 +804,7 @@ function ExpenseForm() {
         {file ? (
           <div className="relative w-full aspect-video bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center">
             <img src={URL.createObjectURL(file)} alt="Preview" className="max-w-full max-h-full object-contain" />
-            <button 
+            <button
               type="button"
               className="absolute top-2 right-2 bg-black/60 text-white p-2 rounded-full backdrop-blur-md"
               onClick={() => { setFile(null); if(fileRef.current) fileRef.current.value=''; }}
@@ -619,7 +813,7 @@ function ExpenseForm() {
             </button>
           </div>
         ) : (
-          <button 
+          <button
             type="button"
             onClick={() => fileRef.current?.click()}
             className="w-full bg-gray-50 border border-dashed border-gray-300 rounded-2xl py-6 flex flex-col items-center justify-center text-gray-500 active:bg-gray-100"
@@ -632,8 +826,8 @@ function ExpenseForm() {
           if (e.target.files?.[0]) setFile(e.target.files[0]);
         }} />
       </div>
-      
-      <button 
+
+      <button
         disabled={loading}
         type="submit"
         className="w-full mt-4 bg-gray-900 active:bg-black text-white py-4 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
@@ -646,6 +840,7 @@ function ExpenseForm() {
 
 function RateioForm() {
   const { allUsers } = useApp();
+  const { confirm, toast } = useFeedback();
   const [desc, setDesc] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
@@ -673,17 +868,30 @@ function RateioForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!desc.trim()) return alert("Adicione uma descrição do rateio.");
+    if (!desc.trim()) {
+      toast('Adicione uma descrição do rateio.', 'error');
+      return;
+    }
     const amt = parseFloat(amountStr);
-    if (!amt || amt <= 0) return alert("Adicione um valor válido para dividir.");
-    if (selectedUsers.size === 0) return alert("Selecione pelo menos uma pessoa.");
-    
+    if (!amt || amt <= 0) {
+      toast('Adicione um valor válido para dividir.', 'error');
+      return;
+    }
+    if (selectedUsers.size === 0) {
+      toast('Selecione pelo menos uma pessoa.', 'error');
+      return;
+    }
+
     const valuePerPerson = amt / selectedUsers.size;
-    const isConfirmed = confirm(`O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas.\nCada pessoa pagará: R$ ${valuePerPerson.toFixed(2)}.\nConfirma?`);
+    const isConfirmed = await confirm({
+      title: 'Gerar rateio',
+      message: `O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas. Cada pessoa pagará R$ ${valuePerPerson.toFixed(2)}.`,
+      confirmLabel: 'Gerar',
+    });
     if (!isConfirmed) return;
 
     setLoading(true);
-    
+
     try {
       // Group charges by family
       const familyCharges: Record<string, number> = {};
@@ -706,13 +914,13 @@ function RateioForm() {
       }));
 
       await createCharges(charges);
-      
-      alert('Rateio gerado com sucesso! As famílias verão a cobrança agregada.');
+
+      toast('Rateio gerado com sucesso. As famílias verão a cobrança agregada.');
       setDesc('');
       setAmountStr('');
       setSelectedUsers(new Set());
     } catch(e: any) {
-      alert('Erro ao gerar rateio: ' + (e.message || e));
+      toast('Erro ao gerar rateio: ' + (e.message || e), 'error');
     } finally {
       setLoading(false);
     }
@@ -722,8 +930,8 @@ function RateioForm() {
     <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">O que é este rateio?</label>
-        <input 
-          type="text" 
+        <input
+          type="text"
           value={desc}
           onChange={e => setDesc(e.target.value)}
           placeholder="Ex: Churrasco de Junho"
@@ -733,9 +941,9 @@ function RateioForm() {
       </div>
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Valor Total p/ Dividir (R$)</label>
-        <input 
-          type="number" 
-          step="0.01" 
+        <input
+          type="number"
+          step="0.01"
           value={amountStr}
           onChange={e => setAmountStr(e.target.value)}
           required
@@ -743,7 +951,7 @@ function RateioForm() {
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-600"
         />
       </div>
-      
+
       <div className="pt-2">
         <div className="flex items-center justify-between mb-3 text-sm">
           <label className="font-semibold text-gray-800">Pessoas a cobrar ({selectedUsers.size} sel.)</label>
@@ -756,8 +964,8 @@ function RateioForm() {
           {selectableUsers.map(u => {
             const isSelected = selectedUsers.has(u.uid);
             return (
-              <div 
-                key={u.uid} 
+              <div
+                key={u.uid}
                 className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer select-none transition-colors ${isSelected ? 'bg-blue-50/50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}
                 onClick={() => handleToggleUser(u.uid)}
               >
@@ -773,7 +981,7 @@ function RateioForm() {
         </div>
       </div>
 
-      <button 
+      <button
         disabled={loading}
         type="submit"
         className="w-full mt-4 bg-gray-900 active:bg-black text-white py-4 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
@@ -786,6 +994,7 @@ function RateioForm() {
 
 function CommsForm() {
   const { user } = useApp();
+  const { toast } = useFeedback();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'event' | 'announcement'>('announcement');
   const [title, setTitle] = useState('');
@@ -812,11 +1021,11 @@ function CommsForm() {
         readBy: [],
         createdBy: user?.uid || ''
       });
-      
+
       // O Worker unificado cria a notificação e dispara Web Push quando notifyNow=true.
       void eventId;
 
-      alert('Publicado!');
+      toast('Publicado.');
       setTitle('');
       setDesc('');
       setDate('');
@@ -825,7 +1034,7 @@ function CommsForm() {
       setNotify24h(false);
       setNotify1h(false);
     } catch(err) {
-      alert('Erro ao publicar.');
+      toast('Erro ao publicar.', 'error');
     } finally {
       setLoading(false);
     }
@@ -834,30 +1043,30 @@ function CommsForm() {
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
       <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-2xl">
-        <button 
-          type="button" 
-          onClick={() => setType('announcement')} 
+        <button
+          type="button"
+          onClick={() => setType('announcement')}
           className={`flex-1 py-2 text-xs font-medium rounded-xl select-none ${type === 'announcement' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
         >Aviso</button>
-        <button 
-          type="button" 
-          onClick={() => setType('event')} 
+        <button
+          type="button"
+          onClick={() => setType('event')}
           className={`flex-1 py-2 text-xs font-medium rounded-xl select-none ${type === 'event' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
         >Evento</button>
       </div>
 
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Título</label>
-        <input 
+        <input
           required value={title} onChange={e => setTitle(e.target.value)}
           placeholder={type === 'announcement' ? "Ex: Aplicação de veneno no mato." : "Ex: Churrasco de Junho"}
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
         />
       </div>
-      
+
       <div>
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Detalhes</label>
-        <textarea 
+        <textarea
           required value={desc} onChange={e => setDesc(e.target.value)} rows={3}
           placeholder="Descreva aqui..."
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm resize-none"
@@ -869,20 +1078,20 @@ function CommsForm() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Data</label>
-              <input 
+              <input
                 type="date" value={date} onChange={e => setDate(e.target.value)} required
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
               />
             </div>
             <div className="flex-1">
               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Hora (Opcional)</label>
-              <input 
+              <input
                 type="time" value={time} onChange={e => setTime(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none text-sm"
               />
             </div>
           </div>
-          
+
           <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mt-2">
             <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 block">Notificações</label>
             <div className="space-y-3">
@@ -903,7 +1112,7 @@ function CommsForm() {
         </div>
       )}
 
-      <button 
+      <button
         disabled={loading} type="submit"
         className="w-full mt-4 bg-blue-600 active:bg-blue-700 text-white py-3.5 rounded-2xl font-medium flex items-center justify-center transition-all disabled:opacity-50"
       >
@@ -915,11 +1124,12 @@ function CommsForm() {
 
 function CommsManager() {
   const { events, allUsers } = useApp();
-  
+  const { confirm } = useFeedback();
+
   return (
     <div className="space-y-6">
       <CommsForm />
-      
+
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
         <h3 className="text-sm font-semibold text-gray-800 mb-4">Mural Recente</h3>
         <div className="space-y-4">
@@ -939,14 +1149,14 @@ function CommsManager() {
                      <h4 className="text-sm font-semibold text-gray-800 mt-1">{evt.title}</h4>
                    </div>
                    <button className="text-gray-400 hover:text-red-500 transition-colors p-1" onClick={async () => {
-                     if (confirm('Excluir este item?')) {
+                     if (await confirm({ title: 'Excluir item', message: 'Excluir este item do mural?', confirmLabel: 'Excluir', variant: 'danger' })) {
                        await deleteEvent(evt.id);
                      }
                    }}>
                      <XCircle size={16} />
                    </button>
                  </div>
-                 
+
                  <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
                    {!isEvent && (
                      <div className="flex items-center gap-1">
