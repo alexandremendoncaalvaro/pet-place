@@ -45,8 +45,24 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 390, height: 844 },
+        video: {
+          mode: 'on',
+          size: { width: 390, height: 844 },
+          show: {
+            actions: {
+              duration: 900,
+              position: 'bottom-right',
+              fontSize: 13,
+            },
+            test: {
+              level: 'step',
+              position: 'top-left',
+              fontSize: 11,
+            },
+          },
+        },
         launchOptions: {
-          slowMo: 150,
+          slowMo: 220,
         },
       },
     },

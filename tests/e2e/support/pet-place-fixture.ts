@@ -21,12 +21,33 @@ const now = '2026-05-03T12:00:00.000Z';
 const currentMonth = '2026-05';
 const mediaFixtureDir = join(process.cwd(), 'tests', 'fixtures', 'media');
 
-export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unauthenticated?: boolean } = {}): PetPlaceE2EState {
+export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unauthenticated?: boolean; anonymized?: boolean } = {}): PetPlaceE2EState {
+  const names = options.anonymized
+    ? {
+        adminName: 'Tutor Azul',
+        residentName: 'Tutor Verde',
+        linkedName: 'Tutor Laranja',
+        offlineName: 'Tutor Cinza',
+        adminPet: 'Pet Sol',
+        residentPet: 'Pet Nuvem',
+        linkedPet: 'Pet Lua',
+        offlinePet: 'Pet Chuva',
+      }
+    : {
+        adminName: 'Alexandre Mendonca Alvaro',
+        residentName: 'Bruna Silva',
+        linkedName: 'Marielle Santos',
+        offlineName: 'Everton Lima',
+        adminPet: 'Amora',
+        residentPet: 'Nina',
+        linkedPet: 'Belinha',
+        offlinePet: 'Thor',
+      };
   const alexandre: UserProfile = {
     uid: 'user-admin',
-    name: 'Alexandre Mendonca Alvaro',
+    name: names.adminName,
     phone: '47999999999',
-    dogName: 'Amora',
+    dogName: names.adminPet,
     role: 'admin',
     email: 'alexandre@example.com',
     familyId: 'family-admin',
@@ -36,9 +57,9 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
   };
   const bruna: UserProfile = {
     uid: 'user-bruna',
-    name: 'Bruna Silva',
+    name: names.residentName,
     phone: '47988888888',
-    dogName: 'Nina',
+    dogName: names.residentPet,
     role: 'resident',
     email: 'bruna@example.com',
     familyId: 'family-bruna',
@@ -48,9 +69,9 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
   };
   const marielle: UserProfile = {
     uid: 'user-marielle',
-    name: 'Marielle Santos',
+    name: names.linkedName,
     phone: '47977777777',
-    dogName: 'Belinha',
+    dogName: names.linkedPet,
     role: 'resident',
     email: 'marielle@example.com',
     familyId: 'family-marielle',
@@ -60,9 +81,9 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
   };
   const evertonOffline: UserProfile = {
     uid: 'offline-everton',
-    name: 'Everton Lima',
+    name: names.offlineName,
     phone: '47966666666',
-    dogName: 'Thor',
+    dogName: names.offlinePet,
     role: 'resident',
     email: '',
     familyId: 'offline-everton',
@@ -77,13 +98,13 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
     user,
     users,
     pets: [
-      { id: 'pet-amora', ownerId: 'user-admin', name: 'Amora', breed: 'SRD', photoUrl: '/e2e/amora.svg', createdAt: now },
-      { id: 'pet-belinha', ownerId: 'user-marielle', name: 'Belinha', breed: 'Pinscher', photoUrl: '/e2e/belinha.svg', createdAt: now },
+      { id: 'pet-amora', ownerId: 'user-admin', name: names.adminPet, breed: 'SRD', photoUrl: '/e2e/amora.svg', createdAt: now },
+      { id: 'pet-belinha', ownerId: 'user-marielle', name: names.linkedPet, breed: 'Pinscher', photoUrl: '/e2e/belinha.svg', createdAt: now },
     ],
     payments: [
-      { id: 'payment-admin-may', familyId: 'family-admin', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: 'Alexandre', userDog: 'Amora' },
-      { id: 'payment-bruna-may', familyId: 'family-bruna', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: 'Bruna', userDog: 'Nina' },
-      { id: 'payment-pending', familyId: 'family-marielle', month: currentMonth, amount: 25, proofUrl: '', status: 'pending', type: 'mensalidade', createdAt: now, updatedAt: now, userName: 'Marielle', userDog: 'Belinha' },
+      { id: 'payment-admin-may', familyId: 'family-admin', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.adminName, userDog: names.adminPet },
+      { id: 'payment-bruna-may', familyId: 'family-bruna', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.residentName, userDog: names.residentPet },
+      { id: 'payment-pending', familyId: 'family-marielle', month: currentMonth, amount: 25, proofUrl: '', status: 'pending', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.linkedName, userDog: names.linkedPet },
     ],
     expenses: [
       { id: 'expense-terreno', date: '2026-05-02', title: 'Tadeu rocou o terreno', category: 'Geral', amount: 150, receiptUrl: '/e2e/proof.svg', createdBy: 'user-admin', createdAt: now },
@@ -99,19 +120,19 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
       { id: 'event-mutirao', title: 'Mutirao de limpeza', description: 'Domingo de manha vamos organizar o espaco.', date: '2026-05-10', time: '09:00', type: 'event', readBy: [], createdBy: 'user-admin', createdAt: now },
     ],
     notifications: [
-      { id: 'notification-comment', userId: user?.uid || 'user-admin', title: 'Comentario no seu post', message: 'Bruna comentou na sua publicacao.', isRead: false, createdAt: now, type: 'post_comment', entityType: 'post', entityId: 'post-welcome' },
+      { id: 'notification-comment', userId: user?.uid || 'user-admin', title: 'Comentario no seu post', message: `${names.residentName} comentou na sua publicacao.`, isRead: false, createdAt: now, type: 'post_comment', entityType: 'post', entityId: 'post-welcome' },
     ],
     posts: [
-      { id: 'post-welcome', authorId: 'user-admin', content: 'Amora brincando no Pet Place com @Belinha', mediaUrl: '/e2e/post-photo.svg', mediaType: 'image', likedBy: ['user-bruna'], commentCount: 2, tags: ['pet-belinha'], createdAt: '2026-05-02T20:23:00.000Z' },
+      { id: 'post-welcome', authorId: 'user-admin', content: `${names.adminPet} brincando no Pet Place com @${names.linkedPet}`, mediaUrl: '/e2e/post-photo.svg', mediaType: 'image', likedBy: ['user-bruna'], commentCount: 2, tags: ['pet-belinha'], createdAt: '2026-05-02T20:23:00.000Z' },
     ],
     comments: {
       'post-welcome': [
         { id: 'comment-1', postId: 'post-welcome', authorId: 'user-bruna', content: 'Tambem vi, ficou lindo.', createdAt: now },
-        { id: 'comment-2', postId: 'post-welcome', authorId: 'user-marielle', content: 'Belinha adorou.', createdAt: now },
+        { id: 'comment-2', postId: 'post-welcome', authorId: 'user-marielle', content: `${names.linkedPet} adorou.`, createdAt: now },
       ],
     },
     identityLinkSuggestions: [
-      { id: 'suggestion-marielle', sourceUserId: 'offline-marielle', sourceName: 'Marielle offline', sourcePhone: '47977777777', targetUserId: 'user-marielle', targetName: 'Marielle Santos', targetPhone: '47977777777', phone: '47977777777', status: 'pending', createdAt: now },
+      { id: 'suggestion-marielle', sourceUserId: 'offline-marielle', sourceName: `${names.linkedName} offline`, sourcePhone: '47977777777', targetUserId: 'user-marielle', targetName: names.linkedName, targetPhone: '47977777777', phone: '47977777777', status: 'pending', createdAt: now },
     ],
   };
 }
