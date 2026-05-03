@@ -12,13 +12,13 @@ const basePayment: Payment = {
   type: 'mensalidade',
   createdAt: '2026-05-01T10:00:00.000Z',
   updatedAt: '2026-05-01T10:00:00.000Z',
-  userName: 'Bruna',
+  userName: 'Tutor Verde',
 };
 
 const baseExpense: Expense = {
   id: 'expense-1',
   date: '2026-05-02',
-  title: 'Tadeu roçou o terreno',
+  title: 'Manutenção do terreno',
   category: 'Geral',
   amount: 150,
   receiptUrl: '/receipts/1',
@@ -63,12 +63,12 @@ describe('cash ledger', () => {
     expect(ledger[0]).toMatchObject({
       kind: 'entrada',
       title: 'Doação',
-      subtitle: 'Bruna - Ajuda extra',
+      subtitle: 'Tutor Verde - Ajuda extra',
       amount: 50,
     });
     expect(ledger[1]).toMatchObject({
       kind: 'saida',
-      title: 'Tadeu roçou o terreno',
+      title: 'Manutenção do terreno',
       subtitle: 'Geral',
       amount: 150,
     });

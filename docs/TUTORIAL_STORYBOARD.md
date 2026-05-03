@@ -7,6 +7,8 @@ Estes tutoriais sao gravacoes narrativas, nao testes de regressao. O objetivo e 
 - [Playwright Videos](https://playwright.dev/docs/videos): gravacao de video, tamanho fixo e anotacoes visuais de acoes.
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices): locators orientados ao usuario, assertions reais e testes resilientes.
 - [Playwright Codegen](https://playwright.dev/docs/codegen): fluxo util para observar a interacao real antes de transformar em script.
+- [Piper](https://github.com/rhasspy/piper): sintese neural local de voz, sem conta e sem envio para servico externo.
+- [Voz PT-BR Faber para Piper](https://huggingface.co/Trelis/piper-pt-br-faber-medium): modelo ONNX usado como cache local para narracao em portugues brasileiro.
 - Guias atuais de demo de produto recomendam roteiro antes da gravacao, pausas naturais, cursor deliberado, callouts e legenda ou voz para orientar a pessoa assistindo.
 - WebM com narracao usa audio Opus muxado por ffmpeg, mantendo os videos pequenos e compatíveis com navegadores modernos.
 
@@ -14,8 +16,10 @@ Estes tutoriais sao gravacoes narrativas, nao testes de regressao. O objetivo e 
 
 - Dados sempre ficticios: `Tutor Azul`, `Tutor Laranja`, `Tutor Rosa`, `Pet Sol`, `Pet Lua`.
 - Nada de nomes reais, fotos reais, pets reais ou comprovantes reais.
+- O tutorial usa API mockada e fixture isolada; ele nao deve ler dados de dev ou producao.
+- A legenda e a narracao usam o mesmo arquivo fonte: `tools/e2e/tutorial-narration.json`.
 - Cada video conta uma historia completa, com comeco, acao principal e resultado.
-- O texto da legenda explica a intencao, nao repete mecanicamente o clique.
+- O texto da legenda e narrado praticamente igual, para evitar duas historias concorrendo.
 - Testes E2E continuam rapidos; videos tutorial ficam em suite propria.
 
 ## Videos atuais
@@ -29,7 +33,7 @@ Roteiro:
 1. Abrir nova publicacao.
 2. Digitar um texto contextual.
 3. Usar `@` para marcar `Tutor Laranja`.
-4. Anexar uma imagem ficticia.
+4. Anexar uma imagem ilustrada ficticia.
 5. Conferir a previa.
 6. Publicar.
 7. Abrir comentarios e adicionar um comentario de exemplo.
@@ -49,7 +53,7 @@ Roteiro:
 1. Abrir nova publicacao.
 2. Digitar texto com `@`.
 3. Selecionar `Pet Lua`.
-4. Anexar um MP4 curto de fixture.
+4. Anexar um MP4 curto e ficticio de fixture.
 5. Conferir previa do video.
 6. Publicar e confirmar que o post mostra video e tag do pet.
 
@@ -83,7 +87,9 @@ Mensagem que o tutorial deve transmitir:
 
 ## Voz sintetizada
 
-A narracao local usa a voz `Microsoft Maria Desktop` quando disponivel no Windows. Ela e gratuita e local, mas deve ser tratada como rascunho de documentacao. Se a qualidade nao ficar boa para portfolio publico, manter os videos com legendas ou gravar voz humana depois.
+A narracao local usa Piper por padrao. O script baixa a voz PT-BR Faber para `tools/e2e/tts/piper/` na primeira execucao; os arquivos do modelo ficam ignorados pelo Git para nao pesar o repositorio. A voz nativa do Windows continua disponivel apenas como fallback com `TUTORIAL_TTS=sapi`.
+
+Mesmo com Piper, a narracao sintetica deve ser tratada como rascunho de documentacao. Para video final de portfolio, a alternativa mais natural continua sendo gravar voz humana por cima do mesmo roteiro.
 
 Comando:
 

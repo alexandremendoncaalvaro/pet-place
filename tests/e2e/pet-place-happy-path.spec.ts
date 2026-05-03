@@ -7,13 +7,13 @@ test.beforeEach(async ({ page }) => {
   state = createPetPlaceState();
   await installPetPlaceApiMock(page, state);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Olá, Alexandre/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Tutor Azul/ })).toBeVisible();
 });
 
 test('01 - home mostra mensalidade vigente e feed inicial', async ({ page }) => {
   await expect(page.getByText(/Mensalidade:/)).toBeVisible();
   await expect(page.getByText(/Em dia/)).toBeVisible();
-  await expect(page.getByText(/Amora brincando/)).toBeVisible();
+  await expect(page.getByText(/Pet Sol brincando/)).toBeVisible();
   await expectImageLoaded(page.getByAltText('Post media').first());
   await expect(page.getByRole('button', { name: 'Comentários da publicação' })).toContainText('2');
 });
@@ -47,11 +47,11 @@ test('04 - mural lista notificacoes e eventos importantes', async ({ page }) => 
 
 test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
   await page.getByText('Comunidade').click();
-  await page.getByPlaceholder('Buscar...').fill('Marielle');
-  await expect(page.getByText('Marielle Santos')).toBeVisible();
-  await page.getByPlaceholder('Buscar...').fill('Belinha');
-  await expect(page.getByText('Belinha')).toBeVisible();
-  await expectImageLoaded(page.getByAltText('Belinha').first());
+  await page.getByPlaceholder('Buscar...').fill('Tutor Laranja');
+  await expect(page.getByText('Tutor Laranja')).toBeVisible();
+  await page.getByPlaceholder('Buscar...').fill('Pet Lua');
+  await expect(page.getByText('Pet Lua')).toBeVisible();
+  await expectImageLoaded(page.getByAltText('Pet Lua').first());
 });
 
 test('06 - perfil atualiza telefone no formato brasileiro', async ({ page }) => {
@@ -64,11 +64,11 @@ test('06 - perfil atualiza telefone no formato brasileiro', async ({ page }) => 
 
 test('07 - nova publicacao aceita mencao digitada com arroba', async ({ page }) => {
   await page.getByRole('button', { name: /Nova publica/ }).click();
-  await page.getByPlaceholder(/O que/).fill('Oi @Ma');
-  const marielleSuggestion = page.getByRole('button').filter({ hasText: 'Marielle Santos' }).filter({ hasText: 'Pessoa' });
-  await expect(marielleSuggestion).toBeVisible();
-  await marielleSuggestion.click();
-  await page.getByPlaceholder(/O que/).fill('Oi @Marielle Santos, bem-vinda ao Pet Place');
+  await page.getByPlaceholder(/O que/).fill('Oi @Tu');
+  const linkedSuggestion = page.getByRole('button').filter({ hasText: 'Tutor Laranja' }).filter({ hasText: 'Pessoa' });
+  await expect(linkedSuggestion).toBeVisible();
+  await linkedSuggestion.click();
+  await page.getByPlaceholder(/O que/).fill('Oi @Tutor Laranja, bem-vinda ao Pet Place');
   await page.getByRole('button', { name: 'Postar' }).click();
   await expect(page.getByText(/bem-vinda ao Pet Place/)).toBeVisible();
 });
@@ -93,9 +93,9 @@ test('10 - admin registra pagamento externo com comprovante', async ({ page }) =
   await page.getByRole('button', { name: 'Admin' }).click();
   await page.getByRole('button', { name: /Pessoas/ }).click();
   await page.getByRole('button', { name: /Pagamento externo/ }).click();
-  await page.getByPlaceholder('Nome da pessoa').fill('Carla Martins');
+  await page.getByPlaceholder('Nome da pessoa').fill('Tutor Rosa');
   await page.getByPlaceholder('(47) 99999-9999').fill('(47) 95555-4444');
-  await page.getByPlaceholder('Nome do pet (opcional)').fill('Luna');
+  await page.getByPlaceholder('Nome do pet (opcional)').fill('Pet Vento');
   await page.locator('input[type="month"]').fill('2026-05');
   await page.locator('input[type="number"]').first().fill('25');
   await page.getByTestId('manual-payment-proof-input').setInputFiles({

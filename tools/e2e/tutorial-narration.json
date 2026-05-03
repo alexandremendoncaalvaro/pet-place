@@ -2,16 +2,83 @@
   {
     "id": "01-post-com-imagem",
     "title": "Post com imagem",
-    "text": "Neste exemplo, o Tutor Azul chegou no Pet Place, tirou uma foto do encontro e quer compartilhar com a comunidade. Ele abre uma nova publicacao, digita um texto, usa arroba para marcar o Tutor Laranja, confere a previa da imagem e publica. Depois, abre os comentarios para mostrar como a conversa continua dentro do proprio post."
+    "segments": [
+      {
+        "text": "Tutor Azul chegou ao Pet Place e quer compartilhar um registro do encontro com a comunidade.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "Ao digitar arroba e parte do nome, o app mostra sugestoes de pessoas e pets.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "A pessoa marcada entra no texto do post, como em uma rede social.",
+        "pauseMs": 900
+      },
+      {
+        "text": "A imagem ficticia aparece em previa antes da publicacao.",
+        "pauseMs": 900
+      },
+      {
+        "text": "Depois de postar, a imagem e a marcacao ficam visiveis no feed.",
+        "pauseMs": 900
+      },
+      {
+        "text": "A conversa continua nos comentarios do proprio post.",
+        "pauseMs": 900
+      }
+    ]
   },
   {
     "id": "02-post-com-video",
     "title": "Post com video",
-    "text": "Agora o Tutor Azul gravou um video curto de um pet brincando no espaco. Ele cria uma publicacao, digita arroba, seleciona o Pet Lua, anexa um MP4 curto e confere a previa antes de publicar. O objetivo e mostrar a diferenca entre postar imagem e postar video, mantendo a marcacao de pet visivel no feed."
+    "segments": [
+      {
+        "text": "Agora o tutorial mostra um video curto, gravado em um contexto ficticio do Pet Place.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "Digitando arroba e parte do nome do pet, a sugestao aparece no editor.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "Selecionar o pet cria uma marcacao que pode notificar a familia vinculada.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "O MP4 curto entra como previa antes da publicacao.",
+        "pauseMs": 900
+      },
+      {
+        "text": "No feed, o video publicado aparece junto com a tag do pet.",
+        "pauseMs": 900
+      }
+    ]
   },
   {
     "id": "03-pagamento-e-transparencia",
     "title": "Pagamento externo e transparencia",
-    "text": "Neste fluxo, uma pessoa pagou pelo WhatsApp e ainda nao usa o aplicativo. O administrador abre a area de pessoas, registra um pagamento externo para o Tutor Rosa, anexa um comprovante ficticio e salva no caixa. Em seguida, abre o extrato para mostrar que a comunidade consegue ver entradas e saidas no mesmo periodo."
+    "segments": [
+      {
+        "text": "Quando alguem paga fora do app, o administrador registra tudo sem obrigar essa pessoa a entrar.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "O formulario cria uma pessoa offline com telefone e pet ficticios.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "A competencia, o valor e o comprovante ficam associados ao caixa.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "Ao registrar, o pagamento entra aprovado e documentado.",
+        "pauseMs": 900
+      },
+      {
+        "text": "No extrato, a comunidade confere entradas e saidas no mesmo periodo.",
+        "pauseMs": 1000
+      }
+    ]
   }
 ]
