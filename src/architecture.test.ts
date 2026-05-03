@@ -65,12 +65,18 @@ describe('project architecture guardrails', () => {
     const worker = read('worker/index.ts');
     const api = read('src/services/api.ts');
     const postItem = read('src/components/PostItem.tsx');
+    const uploads = read('src/services/uploads.ts');
+    const createPostModal = read('src/components/CreatePostModal.tsx');
 
     expect(worker).toContain("request.headers.get('Range')");
     expect(worker).toContain("headers.set('Accept-Ranges', 'bytes')");
     expect(worker).toContain("headers.set('Content-Range'");
     expect(worker).toContain('poster_key');
     expect(api).toContain('createVideoPoster');
+    expect(uploads).toContain("'image/webp'");
+    expect(uploads).toContain('validateVideoForUpload');
+    expect(createPostModal).toContain('video/mp4,video/webm');
+    expect(createPostModal).not.toContain('video/quicktime');
     expect(postItem).toContain('poster={post.posterUrl}');
     expect(postItem).toContain('preload="metadata"');
   });
@@ -92,8 +98,10 @@ describe('project architecture guardrails', () => {
 
     expect(existsSync(join(root, 'assets/pet-place.jpeg'))).toBe(true);
     expect(existsSync(join(root, 'docs/DESIGN_SYSTEM.md'))).toBe(true);
+    expect(existsSync(join(root, 'docs/MEDIA_POLICY.md'))).toBe(true);
     expect(readme).toContain('assets/pet-place.jpeg');
     expect(readme).toContain('docs/DESIGN_SYSTEM.md');
+    expect(readme).toContain('docs/MEDIA_POLICY.md');
     expect(readme).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });

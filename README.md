@@ -61,6 +61,10 @@ Diretrizes principais:
 - componentes com estados consistentes de foco, toque, disabled e feedback;
 - visual mobile-first, claro e utilitário, adequado para uso recorrente pela comunidade.
 
+## Mídia
+
+A política de mídia fica em [docs/MEDIA_POLICY.md](docs/MEDIA_POLICY.md). Imagens sociais são otimizadas para WebP, vídeos do mural usam MP4/WebM com capa WebP, e comprovantes ou recibos permanecem no formato original para preservar auditoria.
+
 ## Rodando localmente
 
 ```powershell

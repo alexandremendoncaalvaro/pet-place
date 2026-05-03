@@ -2,6 +2,7 @@
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
+import { validateVideoForUpload } from '../services/uploads';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
 import { Badge, Button, IconButton, ModalSurface } from './ui';
@@ -19,7 +20,28 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const [postTags, setPostTags] = useState<string[]>([]);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [isValidatingMedia, setIsValidatingMedia] = useState(false);
   const postFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleMediaSelected = async (file: File | undefined) => {
+    if (!file) return;
+    setIsValidatingMedia(true);
+    try {
+      if (file.type.startsWith('video/')) {
+        const validationError = await validateVideoForUpload(file);
+        if (validationError) {
+          toast(validationError, 'error');
+          return;
+        }
+      } else if (file.size > 15 * 1024 * 1024) {
+        toast('A imagem não pode passar de 15MB.', 'error');
+        return;
+      }
+      setPostFile(file);
+    } finally {
+      setIsValidatingMedia(false);
+    }
+  };
 
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postFile) return;
@@ -86,11 +108,11 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
           <h2 className="text-lg font-bold text-ink-900">Nova Publicação</h2>
           <Button
             onClick={handleCreatePost}
-            disabled={isPosting || (!postContent.trim() && !postFile)}
+            disabled={isPosting || isValidatingMedia || (!postContent.trim() && !postFile)}
             className="rounded-full"
             size="sm"
           >
-            {isPosting ? 'Postando...' : 'Postar'}
+            {isPosting ? 'Postando...' : isValidatingMedia ? 'Lendo...' : 'Postar'}
           </Button>
         </div>
 
@@ -173,15 +195,17 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
             {postContent.length}/2000
           </span>
 
-          <input type="file" accept="image/*,video/mp4,video/quicktime" className="hidden" ref={postFileInputRef} onChange={e => {
-            if(e.target.files?.[0]) {
-              if (e.target.files[0].size > 15 * 1024 * 1024) {
-                toast('O arquivo não pode passar de 15MB.', 'error');
-                return;
-              }
-              setPostFile(e.target.files[0]);
-            }
-          }} />
+          <input
+            type="file"
+            accept="image/*,video/mp4,video/webm"
+            className="hidden"
+            ref={postFileInputRef}
+            onChange={e => {
+              const file = e.target.files?.[0];
+              e.currentTarget.value = '';
+              void handleMediaSelected(file);
+            }}
+          />
         </div>
       </ModalSurface>
     </div>
