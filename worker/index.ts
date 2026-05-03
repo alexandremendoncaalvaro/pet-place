@@ -162,7 +162,7 @@ async function routeRealtimeApi(path: string, method: string, request: Request, 
 }
 
 async function routePublicApi(path: string, method: string, request: Request, env: Env): Promise<Response | null> {
-  if (path === '/health') return json({ ok: true, service: 'caixinha-pet-place', time: now() });
+  if (path === '/health') return json({ ok: true, service: 'pet-place', time: now() });
   if (path === '/push/vapid-public-key') return json({ publicKey: env.VAPID_PUBLIC_KEY || '' });
   if (path === '/auth/google/start' && method === 'GET') return googleStart(request, env);
   if (path === '/auth/google/callback' && method === 'GET') return googleCallback(request, env);

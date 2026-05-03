@@ -20,7 +20,7 @@ async function check(path, validate) {
 
 await check('/api/health', (body) => {
   const parsed = JSON.parse(body);
-  return parsed.ok === true && parsed.service === 'caixinha-pet-place';
+  return parsed.ok === true && parsed.service === 'pet-place';
 });
 
 await check('/', (body) => body.includes('<div id="root"></div>') && body.includes('/assets/'));
