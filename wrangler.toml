@@ -30,8 +30,7 @@ new_sqlite_classes = ["RealtimeHub"]
 
 [vars]
 APP_URL = "https://pet-place.pages.dev"
-BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
-VAPID_SUBJECT = "mailto:peritto@gmail.com"
+VAPID_SUBJECT = "https://pet-place.pages.dev"
 
 # Configure secrets with Wrangler:
 # - GOOGLE_CLIENT_ID
@@ -68,8 +67,7 @@ class_name = "RealtimeHub"
 
 [env.production.vars]
 APP_URL = "https://pet-place.pages.dev"
-BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
-VAPID_SUBJECT = "mailto:peritto@gmail.com"
+VAPID_SUBJECT = "https://pet-place.pages.dev"
 
 [env.dev]
 name = "pet-place-dev"
@@ -99,5 +97,4 @@ class_name = "RealtimeHub"
 
 [env.dev.vars]
 APP_URL = "https://pet-place-dev.pages.dev"
-BOOTSTRAP_ADMIN_EMAIL = "peritto@gmail.com"
-VAPID_SUBJECT = "mailto:peritto@gmail.com"
+VAPID_SUBJECT = "https://pet-place-dev.pages.dev"
