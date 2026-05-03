@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { classifyUploadMedia, normalizeUploadFile, validateVideoForUpload } from './uploads';
+import { classifyUploadMedia, getUploadMimeType, normalizeUploadFile, validateVideoForUpload } from './uploads';
 
 describe('upload media classification', () => {
   it('treats mp4 files as videos even when the browser leaves the MIME type empty', () => {
     const file = new File(['sample'], 'iphone-clip.mp4', { type: '' });
 
     expect(classifyUploadMedia(file)).toBe('video');
+    expect(getUploadMimeType(file)).toBe('video/mp4');
     expect(normalizeUploadFile(file, 'video').type).toBe('video/mp4');
   });
 

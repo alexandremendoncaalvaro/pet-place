@@ -59,7 +59,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {toastState && (
-        <div className="fixed left-4 right-4 bottom-24 z-50 mx-auto max-w-md">
+        <div className="fixed left-4 right-4 bottom-24 z-[220] mx-auto max-w-md">
           <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg ${
             toastState.variant === 'error'
               ? 'bg-red-50 border-red-100 text-red-700'
