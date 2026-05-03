@@ -1,4 +1,6 @@
 import { expect, Locator, Page, Request, Route } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, UserProfile } from '../../../src/lib/types';
 
 export interface PetPlaceE2EState {
@@ -17,6 +19,7 @@ export interface PetPlaceE2EState {
 
 const now = '2026-05-03T12:00:00.000Z';
 const currentMonth = '2026-05';
+const mediaFixtureDir = join(process.cwd(), 'tests', 'fixtures', 'media');
 
 export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unauthenticated?: boolean } = {}): PetPlaceE2EState {
   const alexandre: UserProfile = {
@@ -138,6 +141,16 @@ export async function installPetPlaceApiMock(page: Page, state: PetPlaceE2EState
     });
   });
 
+  await page.route('**/e2e/tutorial-video.mp4', async (route) => {
+    await route.fulfill({
+      contentType: 'video/mp4',
+      body: readFileSync(join(mediaFixtureDir, 'tutorial-video.mp4')),
+      headers: {
+        'Accept-Ranges': 'bytes',
+      },
+    });
+  });
+
   await page.route('**/e2e/*.svg', async (route) => {
     const name = new URL(route.request().url()).pathname.split('/').pop()?.replace('.svg', '') || 'pet-place';
     await route.fulfill({
@@ -220,7 +233,7 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
       authorId: data.authorId || state.user?.uid || 'user-admin',
       content: data.content || '',
       mediaType: data.mediaType,
-      mediaUrl: form.media ? '/e2e/post-photo.svg' : undefined,
+      mediaUrl: form.media ? data.mediaType === 'video' ? '/e2e/tutorial-video.mp4' : '/e2e/post-photo.svg' : undefined,
       posterUrl: form.poster ? '/e2e/post-photo.svg' : undefined,
       likedBy: [],
       commentCount: 0,
@@ -347,8 +360,9 @@ async function readMultipart(request: Request): Promise<Record<string, string>> 
   for (const part of raw.split(/\r?\n--/)) {
     const name = part.match(/name="([^"]+)"/)?.[1];
     if (!name) continue;
+    const isFile = /filename="[^"]+"/.test(part);
     const [, value = ''] = part.split(/\r?\n\r?\n/);
-    fields[name] = value.replace(/\r?\n--$/, '').replace(/\r?\n$/, '').trim();
+    fields[name] = isFile ? '__file__' : value.replace(/\r?\n--$/, '').replace(/\r?\n$/, '').trim();
   }
   return fields;
 }

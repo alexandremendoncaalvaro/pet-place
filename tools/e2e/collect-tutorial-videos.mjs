@@ -6,9 +6,9 @@ const resultsDir = join(root, 'test-results');
 const targetDir = join(root, 'docs', 'tutorials', 'generated');
 
 const titles = [
-  ['tour-financeiro', /financeiro|comprovante-e-transparencia/i],
-  ['tour-social', /social|publicacao-mencao-e-comentario|licacao-mencao-e-comentario/i],
-  ['tour-admin', /tour-admin|admin/i],
+  ['post-com-imagem', /post-com-imagem|imagem/i],
+  ['post-com-video', /post-com-video|video/i],
+  ['pagamento-e-transparencia', /pagamento-e-transparencia|transparencia/i],
 ];
 
 function walk(dir) {

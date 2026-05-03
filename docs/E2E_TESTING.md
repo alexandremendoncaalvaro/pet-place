@@ -18,7 +18,7 @@ Por padrao, os videos brutos ficam em `test-results/` e nao entram no Git. O com
 
 ## Modelo adotado
 
-A suite de regressao usa fixtures de API em `tests/e2e/support/`. Isso deixa o teste deterministico, independente de Google OAuth real e seguro para rodar localmente ou em CI. A suite de tutorial reaproveita as mesmas fixtures, mas tem passos mais longos e pausas intencionais para gerar videos compreensiveis.
+A suite de regressao usa fixtures de API em `tests/e2e/support/`. Isso deixa o teste deterministico, independente de Google OAuth real e seguro para rodar localmente ou em CI. A suite de tutorial reaproveita as mesmas fixtures, mas tem passos maiores, pausas intencionais e assets reais em `tests/fixtures/media/` para gerar videos compreensiveis.
 
 Os testes E2E devem validar a tela e nao apenas textos auxiliares. Para imagens importantes, como comprovantes, o padrao e validar que o `img` esta visivel, carregado, com `naturalWidth`/`naturalHeight` maiores que zero e opacidade final aplicada.
 
@@ -36,6 +36,16 @@ Esses testes cobrem a aplicacao como usuario, mas ainda nao substituem uma suite
 8. Curtida atualiza contador da publicacao.
 9. Comentario aparece na thread da publicacao.
 10. Admin registra pagamento externo com comprovante.
+
+## Tours de tutorial
+
+Os tutoriais sao fluxos narrativos maiores, diferentes dos testes atomicos:
+
+1. `post-com-imagem`: cria uma publicacao com imagem, mostra a marcacao por `@`, publica e comenta.
+2. `post-com-video`: cria uma publicacao com MP4 curto, mostra preview de video e marcacao de pet.
+3. `pagamento-e-transparencia`: registra pagamento externo no admin e confere o lancamento no extrato.
+
+Esses videos sao gerados a partir da suite `tests/tutorial/`, nao da suite `tests/e2e/`. Isso evita transformar testes de regressao em gravacoes lentas e evita transformar tutoriais em checks superficiais.
 
 ## Cenarios de erro para implementar depois
 
