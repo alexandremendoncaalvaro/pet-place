@@ -2,7 +2,7 @@
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
-import { validateVideoForUpload } from '../services/uploads';
+import { classifyUploadMedia, validateVideoForUpload } from '../services/uploads';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
 import { Badge, Button, IconButton, ModalSurface } from './ui';
@@ -32,14 +32,18 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
     if (!file) return;
     setIsValidatingMedia(true);
     try {
-      if (file.type.startsWith('video/')) {
+      const mediaKind = classifyUploadMedia(file);
+      if (mediaKind === 'video') {
         const validationError = await validateVideoForUpload(file);
         if (validationError) {
           toast(validationError, 'error');
           return;
         }
-      } else if (file.size > 15 * 1024 * 1024) {
+      } else if (mediaKind === 'image' && file.size > 15 * 1024 * 1024) {
         toast('A imagem não pode passar de 15MB.', 'error');
+        return;
+      } else if (mediaKind === 'unknown') {
+        toast('Use uma imagem ou um vídeo MP4.', 'error');
         return;
       }
       setPostFile(file);
@@ -58,7 +62,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
         tags: postTags,
       };
       if (postFile) {
-        postData.mediaType = postFile.type.startsWith('video/') ? 'video' : 'image';
+        postData.mediaType = classifyUploadMedia(postFile) === 'video' ? 'video' : 'image';
       }
       await addPost(postData, postFile || undefined);
 
@@ -135,7 +139,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">
-                  {postFile.type.startsWith('video/') ? (
+                  {classifyUploadMedia(postFile) === 'video' ? (
                     <video src={postFilePreviewUrl || undefined} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop playsInline preload="metadata" />
                   ) : (
                     <ImageWithSkeleton src={postFilePreviewUrl || ''} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-ink-100" containerClassName="w-full max-h-[40vh]" />
@@ -202,7 +206,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
 
           <input
             type="file"
-            accept="image/*,video/mp4"
+            accept="image/*,.mp4,video/mp4"
             className="hidden"
             ref={postFileInputRef}
             onChange={e => {

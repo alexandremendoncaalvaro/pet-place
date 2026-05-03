@@ -1461,8 +1461,9 @@ function inferContentType(key: string): string {
 async function putFile(env: Env, folder: string, file: File): Promise<string> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-100) || 'file';
   const key = `${folder}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+  const contentType = file.type && file.type !== 'application/octet-stream' ? file.type : inferContentType(safeName);
   await env.MEDIA.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+    httpMetadata: { contentType },
   });
   return key;
 }

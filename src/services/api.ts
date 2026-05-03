@@ -1,7 +1,7 @@
 import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
 import { API_BASE, api, toApiError } from './http';
 import { notifyDataChanged, subscribe } from './subscriptions';
-import { compressImage, createVideoPoster } from './uploads';
+import { classifyUploadMedia, compressImage, createVideoPoster, normalizeUploadFile } from './uploads';
 export { requestPushToken } from './push';
 
 export let isRealBackend = true;
@@ -257,9 +257,10 @@ export async function addPost(data: Omit<AppPost, 'id' | 'createdAt' | 'likedBy'
   const form = new FormData();
   form.set('data', JSON.stringify(data));
   if (mediaFile) {
-    const file = data.mediaType === 'image' ? await compressImage(mediaFile) : mediaFile;
+    const mediaKind = data.mediaType || classifyUploadMedia(mediaFile);
+    const file = mediaKind === 'image' ? await compressImage(mediaFile) : normalizeUploadFile(mediaFile, mediaKind);
     form.set('media', file);
-    if (data.mediaType === 'video') {
+    if (mediaKind === 'video') {
       const poster = await createVideoPoster(mediaFile);
       if (poster) form.set('poster', poster);
     }
