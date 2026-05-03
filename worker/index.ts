@@ -623,11 +623,29 @@ async function updateIdentityLinkSuggestionRoute(request: Request, env: Env, use
     if (!source || !target) return bad('Usuarios do vinculo nao encontrados.', 404);
     const sourceFamily = familyId(source);
     const targetFamily = familyId(target);
+    const timestamp = now();
     await env.DB.batch([
-      env.DB.prepare('UPDATE payments SET family_id = ?, updated_at = ? WHERE family_id = ?').bind(sourceFamily, now(), targetFamily),
+      env.DB.prepare(`
+        DELETE FROM payments
+        WHERE type = 'mensalidade'
+          AND status IN ('pending', 'rejected')
+          AND family_id IN (?, ?)
+          AND EXISTS (
+            SELECT 1 FROM payments keeper
+            WHERE keeper.type = 'mensalidade'
+              AND keeper.month = payments.month
+              AND keeper.family_id IN (?, ?)
+              AND keeper.id != payments.id
+              AND (
+                keeper.status = 'approved'
+                OR keeper.family_id = ?
+              )
+          )
+      `).bind(sourceFamily, targetFamily, sourceFamily, targetFamily, sourceFamily),
+      env.DB.prepare('UPDATE payments SET family_id = ?, updated_at = ? WHERE family_id = ?').bind(sourceFamily, timestamp, targetFamily),
       env.DB.prepare('UPDATE pets SET owner_id = ? WHERE owner_id = ?').bind(source.uid, target.uid),
-      env.DB.prepare('UPDATE users SET dog_name = CASE WHEN dog_name = "" THEN ? ELSE dog_name END, updated_at = ? WHERE id = ?').bind(target.dogName || '', now(), source.uid),
-      env.DB.prepare('UPDATE users SET user_status = "blocked", updated_at = ? WHERE id = ?').bind(now(), target.uid),
+      env.DB.prepare('UPDATE users SET dog_name = CASE WHEN dog_name = "" THEN ? ELSE dog_name END, updated_at = ? WHERE id = ?').bind(target.dogName || '', timestamp, source.uid),
+      env.DB.prepare('UPDATE users SET user_status = "blocked", updated_at = ? WHERE id = ?').bind(timestamp, target.uid),
     ]);
     await env.DB.prepare(`
       DELETE FROM payments

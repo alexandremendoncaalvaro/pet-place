@@ -61,6 +61,16 @@ describe('project architecture guardrails', () => {
     expect(postItem).toContain('visibleCommentCount');
   });
 
+  it('cleans duplicate monthly placeholders before merging identity payments', () => {
+    const worker = read('worker/index.ts');
+    const duplicateCleanup = worker.indexOf("DELETE FROM payments\n        WHERE type = 'mensalidade'");
+    const movePayments = worker.indexOf('UPDATE payments SET family_id = ?, updated_at = ? WHERE family_id = ?');
+
+    expect(duplicateCleanup).toBeGreaterThan(-1);
+    expect(movePayments).toBeGreaterThan(-1);
+    expect(duplicateCleanup).toBeLessThan(movePayments);
+  });
+
   it('serves videos with range support and explicit posters', () => {
     const worker = read('worker/index.ts');
     const api = read('src/services/api.ts');
