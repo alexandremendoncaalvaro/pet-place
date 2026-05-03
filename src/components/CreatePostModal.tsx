@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, ImagePlus, AtSign, Send, FileVideo } from 'lucide-react';
+import { X, ImagePlus, AtSign } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
@@ -109,7 +109,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">
                   {postFile.type.startsWith('video/') ? (
-                    <video src={URL.createObjectURL(postFile)} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop />
+                    <video src={URL.createObjectURL(postFile)} className="w-full max-h-[40vh] rounded-2xl object-cover bg-black" muted autoPlay loop playsInline preload="metadata" />
                   ) : (
                     <ImageWithSkeleton src={URL.createObjectURL(postFile)} alt="preview" className="w-full max-h-[40vh] rounded-2xl object-cover bg-ink-100" containerClassName="w-full max-h-[40vh]" />
                   )}

@@ -1223,6 +1223,7 @@ function rowToPost(row: any): any {
     authorId: row.author_id,
     content: row.content,
     mediaUrl: mediaUrl(row.media_key, row.media_url),
+    posterUrl: mediaUrl(row.poster_key, row.poster_url),
     mediaType: row.media_type || undefined,
     likedBy: row.liked_by ? String(row.liked_by).split(',') : [],
     tags: row.tags ? String(row.tags).split(',') : [],
@@ -1236,12 +1237,14 @@ async function addPostRoute(request: Request, env: Env, user: CurrentUser): Prom
   const data = parseFormJson<any>(form, 'data');
   if (data.authorId !== user.uid) throw new HttpError('Sem permissão para publicar por outro usuário.', 403);
   const file = form.get('media');
+  const poster = form.get('poster');
   const mediaKey = file instanceof File && file.size > 0 ? await putFile(env, 'posts', file) : null;
+  const posterKey = poster instanceof File && poster.size > 0 ? await putFile(env, 'posters', poster) : null;
   const id = newId('post');
   await env.DB.prepare(`
-    INSERT INTO posts (id, author_id, content, media_key, media_url, media_type, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, user.uid, data.content || '', mediaKey, mediaKey ? null : data.mediaUrl || null, data.mediaType || null, now()).run();
+    INSERT INTO posts (id, author_id, content, media_key, media_url, media_type, poster_key, poster_url, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, user.uid, data.content || '', mediaKey, mediaKey ? null : data.mediaUrl || null, data.mediaType || null, posterKey, null, now()).run();
   if (Array.isArray(data.tags) && data.tags.length) {
     await env.DB.batch(data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
   }
@@ -1361,14 +1364,35 @@ async function savePushSubscriptionRoute(request: Request, env: Env, user: Curre
   return json({ ok: true });
 }
 
-async function serveMedia(key: string, _request: Request, env: Env, _user: CurrentUser): Promise<Response> {
-  const object = await env.MEDIA.get(decodeURIComponent(key));
+async function serveMedia(key: string, request: Request, env: Env, _user: CurrentUser): Promise<Response> {
+  const decodedKey = decodeURIComponent(key);
+  const rangeHeader = request.headers.get('Range');
+  const object = await env.MEDIA.get(decodedKey, rangeHeader ? { range: request.headers } : undefined);
   if (!object) return bad('Mídia não encontrada.', 404);
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('etag', object.httpEtag);
+  headers.set('Accept-Ranges', 'bytes');
   headers.set('Cache-Control', 'private, max-age=300');
+  if (rangeHeader && object.range) {
+    const range = normalizeR2Range(object.range, object.size);
+    headers.set('Content-Range', `bytes ${range.offset}-${range.end}/${object.size}`);
+    headers.set('Content-Length', String(range.length));
+    return new Response(object.body, { status: 206, headers });
+  }
+  headers.set('Content-Length', String(object.size));
   return new Response(object.body, { headers });
+}
+
+function normalizeR2Range(range: R2Range, objectSize: number): { offset: number; end: number; length: number } {
+  if ('suffix' in range) {
+    const length = Math.min(range.suffix, objectSize);
+    const offset = Math.max(objectSize - length, 0);
+    return { offset, end: objectSize - 1, length };
+  }
+  const offset = range.offset || 0;
+  const length = range.length || Math.max(objectSize - offset, 0);
+  return { offset, end: Math.min(offset + length - 1, objectSize - 1), length };
 }
 
 async function putFile(env: Env, folder: string, file: File): Promise<string> {

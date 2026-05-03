@@ -61,6 +61,20 @@ describe('project architecture guardrails', () => {
     expect(postItem).toContain('visibleCommentCount');
   });
 
+  it('serves videos with range support and explicit posters', () => {
+    const worker = read('worker/index.ts');
+    const api = read('src/services/api.ts');
+    const postItem = read('src/components/PostItem.tsx');
+
+    expect(worker).toContain("request.headers.get('Range')");
+    expect(worker).toContain("headers.set('Accept-Ranges', 'bytes')");
+    expect(worker).toContain("headers.set('Content-Range'");
+    expect(worker).toContain('poster_key');
+    expect(api).toContain('createVideoPoster');
+    expect(postItem).toContain('poster={post.posterUrl}');
+    expect(postItem).toContain('preload="metadata"');
+  });
+
   it('keeps legacy Firebase runtime files out of the public repo root', () => {
     const legacyFiles = [
       'firebase.json',

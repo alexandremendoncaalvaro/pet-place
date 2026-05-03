@@ -78,6 +78,7 @@ export interface AppPost {
   authorId: string;
   content: string;
   mediaUrl?: string;
+  posterUrl?: string;
   mediaType?: 'image' | 'video';
   likedBy: string[];
   commentCount?: number;

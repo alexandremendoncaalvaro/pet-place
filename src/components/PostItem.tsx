@@ -166,7 +166,15 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
           onClick={() => post.mediaType !== 'video' && setFullscreenImage({url: post.mediaUrl!, title: `Publicação de ${author?.name || 'Participante'}`})}
         >
           {post.mediaType === 'video' ? (
-            <video src={post.mediaUrl} className="w-full h-full object-cover" controls muted playsInline />
+            <video
+              src={post.mediaUrl}
+              poster={post.posterUrl}
+              className="w-full h-full object-cover"
+              controls
+              muted
+              playsInline
+              preload="metadata"
+            />
           ) : (
             <>
                <ImageWithSkeleton src={post.mediaUrl} alt="Post media" className="w-full h-full object-cover" containerClassName="w-full h-full" />
