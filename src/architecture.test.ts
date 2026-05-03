@@ -87,10 +87,11 @@ describe('project architecture guardrails', () => {
     expect(postItem).toContain('src={videoSrc}');
     expect(postItem).not.toContain('crossOrigin="use-credentials"');
     expect(postItem).not.toContain('codecs=');
+    expect(postItem).toContain('prepareAuthenticatedVideo');
     expect(postItem).toContain("credentials: 'include'");
-    expect(postItem).toContain('Video fallback fetch succeeded');
+    expect(postItem).toContain('Preparando vídeo...');
     expect(postItem).toContain('preload="metadata"');
-    expect(postItem).toContain('Video playback error');
+    expect(postItem).toContain('Video blob playback error');
   });
 
   it('keeps legacy Firebase runtime files out of the public repo root', () => {

@@ -31,23 +31,42 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [newComment, setNewComment] = useState('');
   const [showLikes, setShowLikes] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
-  const [videoSrc, setVideoSrc] = useState(post.mediaUrl);
+  const [videoSrc, setVideoSrc] = useState<string | undefined>(post.mediaType === 'video' ? undefined : post.mediaUrl);
+  const [isPreparingVideo, setIsPreparingVideo] = useState(post.mediaType === 'video' && !!post.mediaUrl);
   const videoBlobUrlRef = useRef<string | null>(null);
-  const videoRecoveryAttemptedRef = useRef(false);
   const visibleCommentCount = showComments && commentsLoaded ? comments.length : post.commentCount || 0;
 
   useEffect(() => {
+    let cancelled = false;
     if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
     videoBlobUrlRef.current = null;
-    videoRecoveryAttemptedRef.current = false;
     setHasVideoError(false);
-    setVideoSrc(post.mediaUrl);
+    setVideoSrc(post.mediaType === 'video' ? undefined : post.mediaUrl);
+    setIsPreparingVideo(post.mediaType === 'video' && !!post.mediaUrl);
+
+    if (post.mediaType === 'video' && post.mediaUrl) {
+      prepareAuthenticatedVideo(post.mediaUrl).then((result) => {
+        if (cancelled) {
+          if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
+          return;
+        }
+        if (!result.blobUrl) {
+          setHasVideoError(true);
+          setIsPreparingVideo(false);
+          return;
+        }
+        videoBlobUrlRef.current = result.blobUrl;
+        setVideoSrc(result.blobUrl);
+        setIsPreparingVideo(false);
+      });
+    }
 
     return () => {
+      cancelled = true;
       if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
       videoBlobUrlRef.current = null;
     };
-  }, [post.mediaUrl]);
+  }, [post.mediaType, post.mediaUrl, post.id]);
   
   useEffect(() => {
     let unsub: () => void;
@@ -129,44 +148,6 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     }
   };
 
-  const recoverVideoPlayback = async () => {
-    if (!post.mediaUrl || videoRecoveryAttemptedRef.current) {
-      setHasVideoError(true);
-      return;
-    }
-    videoRecoveryAttemptedRef.current = true;
-    try {
-      const response = await fetch(post.mediaUrl, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const headers = {
-        status: response.status,
-        contentType: response.headers.get('content-type'),
-        contentLength: response.headers.get('content-length'),
-        contentRange: response.headers.get('content-range'),
-        acceptRanges: response.headers.get('accept-ranges'),
-      };
-      if (!response.ok) {
-        console.error('Video fallback fetch failed', { postId: post.id, mediaUrl: post.mediaUrl, ...headers });
-        setHasVideoError(true);
-        return;
-      }
-      const blob = await response.blob();
-      const signature = Array.from(new Uint8Array(await blob.slice(0, 16).arrayBuffer()))
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(' ');
-      console.info('Video fallback fetch succeeded', { postId: post.id, mediaUrl: post.mediaUrl, ...headers, blobType: blob.type, blobSize: blob.size, signature });
-      if (videoBlobUrlRef.current) URL.revokeObjectURL(videoBlobUrlRef.current);
-      videoBlobUrlRef.current = URL.createObjectURL(blob);
-      setHasVideoError(false);
-      setVideoSrc(videoBlobUrlRef.current);
-    } catch (error) {
-      console.error('Video fallback fetch crashed', { postId: post.id, mediaUrl: post.mediaUrl, error });
-      setHasVideoError(true);
-    }
-  };
-
   return (
     <Card className="overflow-hidden">
       <div className="p-4 flex items-center gap-3 relative">
@@ -222,27 +203,36 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
         >
           {post.mediaType === 'video' ? (
             <>
-              <video
-                src={videoSrc}
-                poster={post.posterUrl}
-                className="w-full h-full object-cover"
-                controls
-                muted
-                playsInline
-                preload="metadata"
-                onCanPlay={() => setHasVideoError(false)}
-                onError={(event) => {
-                  const video = event.currentTarget;
-                  console.error('Video playback error', {
-                    postId: post.id,
-                    mediaUrl: videoSrc,
-                    errorCode: video.error?.code,
-                    networkState: video.networkState,
-                    readyState: video.readyState,
-                  });
-                  void recoverVideoPlayback();
-                }}
-              />
+              {videoSrc ? (
+                <video
+                  src={videoSrc}
+                  poster={post.posterUrl}
+                  className="w-full h-full object-cover"
+                  controls
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onCanPlay={() => setHasVideoError(false)}
+                  onError={(event) => {
+                    const video = event.currentTarget;
+                    console.error('Video blob playback error', {
+                      postId: post.id,
+                      mediaUrl: post.mediaUrl,
+                      errorCode: video.error?.code,
+                      networkState: video.networkState,
+                      readyState: video.readyState,
+                    });
+                    setHasVideoError(true);
+                  }}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-black">
+                  {post.posterUrl && <img src={post.posterUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />}
+                  <div className="relative rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-ink-900 shadow">
+                    {isPreparingVideo ? 'Preparando vídeo...' : 'Vídeo indisponível'}
+                  </div>
+                </div>
+              )}
               {hasVideoError && (
                 <div className="absolute inset-x-4 bottom-4 rounded-xl bg-ink-900/85 px-4 py-3 text-sm font-medium text-white shadow-lg">
                   Não consegui carregar este vídeo neste aparelho.
@@ -429,4 +419,30 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
       </div>
     </Card>
   );
+}
+
+async function prepareAuthenticatedVideo(mediaUrl: string): Promise<{ blobUrl?: string }> {
+  try {
+    const response = await fetch(mediaUrl, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    const headers = {
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length'),
+      contentRange: response.headers.get('content-range'),
+      acceptRanges: response.headers.get('accept-ranges'),
+    };
+    if (!response.ok) {
+      console.error('Video fetch failed', { mediaUrl, ...headers });
+      return {};
+    }
+    const blob = await response.blob();
+    console.info('Video fetch succeeded', { mediaUrl, ...headers, blobType: blob.type, blobSize: blob.size });
+    return { blobUrl: URL.createObjectURL(blob) };
+  } catch (error) {
+    console.error('Video fetch crashed', { mediaUrl, error });
+    return {};
+  }
 }
