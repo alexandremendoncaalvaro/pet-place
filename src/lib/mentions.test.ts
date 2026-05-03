@@ -14,10 +14,10 @@ const pets: Pet[] = [
 ];
 
 describe('mentions', () => {
-  it('builds searchable people and pet options without the current user profile', () => {
+  it('builds searchable people and pet options including the current user profile', () => {
     const entities = buildMentionEntities(profiles, pets, 'author');
 
-    expect(entities.map((entity) => entity.id)).not.toContain('author');
+    expect(entities.map((entity) => entity.id)).toContain('author');
     expect(filterMentionEntities(entities, 'fran', [])).toMatchObject([{ id: 'pet_francisca', kind: 'pet' }]);
     expect(filterMentionEntities(entities, 'mari', [])).toMatchObject([{ id: 'mother', kind: 'profile' }]);
   });

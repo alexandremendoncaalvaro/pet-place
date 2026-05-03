@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import getCaretCoordinates from 'textarea-caret';
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign, FileVideo } from 'lucide-react';
 import { addPost, addNotification } from '../services/api';
@@ -27,12 +28,14 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   const [postVideoPosterUrl, setPostVideoPosterUrl] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [mentionMenuPosition, setMentionMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const postFileKind = postFile ? classifyUploadMedia(postFile) : 'unknown';
   const mentionEntities = React.useMemo(() => buildMentionEntities(publicProfiles, allPets, user?.uid), [publicProfiles, allPets, user?.uid]);
   const mentionSuggestions = React.useMemo(
-    () => mentionQuery === null ? [] : filterMentionEntities(mentionEntities, mentionQuery, postTags),
+    () => mentionQuery === null ? [] : filterMentionEntities(mentionEntities, mentionQuery, postTags, 8),
     [mentionEntities, mentionQuery, postTags],
   );
   const postFilePreviewUrl = React.useMemo(
@@ -47,6 +50,10 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
   React.useEffect(() => () => {
     if (postVideoPosterUrl) URL.revokeObjectURL(postVideoPosterUrl);
   }, [postVideoPosterUrl]);
+
+  React.useEffect(() => {
+    setActiveMentionIndex(0);
+  }, [mentionQuery]);
 
   const handleMediaSelected = async (file: File | undefined) => {
     if (!file) return;
@@ -107,16 +114,54 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
     if (!match) {
       setMentionQuery(null);
       setMentionStart(null);
+      setMentionMenuPosition(null);
       return;
     }
     setMentionQuery(match[2]);
     setMentionStart(cursor - match[2].length - 1);
+    updateMentionMenuPosition(cursor);
   };
 
   const handleContentChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextValue = event.target.value;
     setPostContent(nextValue);
     syncMentionQuery(nextValue, event.target.selectionStart);
+  };
+
+  const handleContentKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery === null) return;
+    if (event.key === 'Escape') {
+      setMentionQuery(null);
+      setMentionStart(null);
+      setMentionMenuPosition(null);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveMentionIndex((current) => Math.min(current + 1, Math.max(mentionSuggestions.length - 1, 0)));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveMentionIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+    if ((event.key === 'Enter' || event.key === 'Tab') && mentionSuggestions[activeMentionIndex]) {
+      event.preventDefault();
+      applyMention(mentionSuggestions[activeMentionIndex]);
+    }
+  };
+
+  const updateMentionMenuPosition = (cursor: number) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const caret = getCaretCoordinates(textarea, cursor);
+    const menuWidth = 260;
+    const maxLeft = Math.max(textarea.clientWidth - menuWidth, 0);
+    setMentionMenuPosition({
+      top: caret.top + caret.height + 8 - textarea.scrollTop,
+      left: Math.min(Math.max(caret.left - textarea.scrollLeft, 0), maxLeft),
+    });
   };
 
   const applyMention = (entity: MentionEntity) => {
@@ -132,6 +177,7 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
     setPostTags((current) => current.includes(entity.id) ? current : [...current, entity.id]);
     setMentionQuery(null);
     setMentionStart(null);
+    setMentionMenuPosition(null);
 
     window.setTimeout(() => {
       textareaRef.current?.focus();
@@ -199,7 +245,8 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
         <div className="flex-1 overflow-y-auto p-4 hide-scrollbar">
           <div className="flex gap-3">
             <ImageWithSkeleton src={user?.photoUrl || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-10 h-10 rounded-full object-cover shrink-0" containerClassName="w-10 h-10 shrink-0 rounded-full" />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
+              <div className="relative">
               <textarea
                 ref={textareaRef}
                 autoFocus
@@ -207,19 +254,24 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
                 className="w-full bg-transparent resize-none outline-none text-ink-900 placeholder-ink-400 text-lg min-h-[120px]"
                 value={postContent}
                 onChange={handleContentChange}
+                onKeyDown={handleContentKeyDown}
                 onKeyUp={(event) => syncMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
                 onClick={(event) => syncMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
+                onScroll={(event) => mentionQuery !== null && syncMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
               />
 
-              {mentionSuggestions.length > 0 && (
-                <div className="mb-3 overflow-hidden rounded-card border border-ink-100 bg-white shadow-card">
-                  {mentionSuggestions.map((entity) => (
+              {mentionQuery !== null && mentionMenuPosition && (
+                <div
+                  className="absolute z-[130] w-[260px] max-w-[calc(100vw-6rem)] overflow-hidden rounded-card border border-ink-100 bg-white shadow-xl"
+                  style={{ top: mentionMenuPosition.top, left: mentionMenuPosition.left }}
+                >
+                  {mentionSuggestions.length > 0 ? mentionSuggestions.map((entity, index) => (
                     <button
                       key={`${entity.kind}:${entity.id}`}
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => applyMention(entity)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-ink-50 active:bg-ink-100"
+                      className={`flex w-full items-center gap-3 px-3 py-2 text-left ${index === activeMentionIndex ? 'bg-brand-50' : 'hover:bg-ink-50 active:bg-ink-100'}`}
                     >
                       <MentionAvatar entity={entity} />
                       <span className="min-w-0 flex-1">
@@ -227,9 +279,12 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
                         <span className="block text-xs text-ink-400">{entity.kind === 'pet' ? `Pet de ${entity.owner?.name || 'participante'}` : 'Pessoa'}</span>
                       </span>
                     </button>
-                  ))}
+                  )) : (
+                    <div className="px-3 py-2 text-sm font-medium text-ink-400">Nenhuma sugestão</div>
+                  )}
                 </div>
               )}
+              </div>
 
               {postFile && (
                 <div className="relative inline-block mt-2 max-w-full">

@@ -83,6 +83,10 @@ describe('project architecture guardrails', () => {
 
     expect(createPostModal).toContain('applyMention');
     expect(createPostModal).toContain('mentionSuggestions');
+    expect(createPostModal).toContain("from 'textarea-caret'");
+    expect(createPostModal).toContain('mentionMenuPosition');
+    expect(createPostModal).toContain('onKeyDown={handleContentKeyDown}');
+    expect(createPostModal).toContain('style={{ top: mentionMenuPosition.top, left: mentionMenuPosition.left }}');
     expect(createPostModal).toContain('resolveMentionNotificationTargets(postTags');
     expect(postItem).toContain('resolveMentionNotificationTargets(newTags');
     expect(mentions).toContain('const familyId = owner.familyId || owner.uid');

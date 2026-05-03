@@ -4,9 +4,8 @@ export type MentionEntity =
   | { id: string; kind: 'profile'; name: string; searchText: string; profile: UserProfile }
   | { id: string; kind: 'pet'; name: string; searchText: string; pet: Pet; owner?: UserProfile };
 
-export function buildMentionEntities(profiles: UserProfile[], pets: Pet[], currentUserId?: string): MentionEntity[] {
+export function buildMentionEntities(profiles: UserProfile[], pets: Pet[], _currentUserId?: string): MentionEntity[] {
   const profileEntities: MentionEntity[] = profiles
-    .filter((profile) => profile.uid !== currentUserId)
     .map((profile) => ({
       id: profile.uid,
       kind: 'profile',
