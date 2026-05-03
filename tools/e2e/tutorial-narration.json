@@ -1,0 +1,17 @@
+[
+  {
+    "id": "01-post-com-imagem",
+    "title": "Post com imagem",
+    "text": "Neste exemplo, o Tutor Azul chegou no Pet Place, tirou uma foto do encontro e quer compartilhar com a comunidade. Ele abre uma nova publicacao, digita um texto, usa arroba para marcar o Tutor Laranja, confere a previa da imagem e publica. Depois, abre os comentarios para mostrar como a conversa continua dentro do proprio post."
+  },
+  {
+    "id": "02-post-com-video",
+    "title": "Post com video",
+    "text": "Agora o Tutor Azul gravou um video curto de um pet brincando no espaco. Ele cria uma publicacao, digita arroba, seleciona o Pet Lua, anexa um MP4 curto e confere a previa antes de publicar. O objetivo e mostrar a diferenca entre postar imagem e postar video, mantendo a marcacao de pet visivel no feed."
+  },
+  {
+    "id": "03-pagamento-e-transparencia",
+    "title": "Pagamento externo e transparencia",
+    "text": "Neste fluxo, uma pessoa pagou pelo WhatsApp e ainda nao usa o aplicativo. O administrador abre a area de pessoas, registra um pagamento externo para o Tutor Rosa, anexa um comprovante ficticio e salva no caixa. Em seguida, abre o extrato para mostrar que a comunidade consegue ver entradas e saidas no mesmo periodo."
+  }
+]

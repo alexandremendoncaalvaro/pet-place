@@ -39,7 +39,7 @@ Esses testes cobrem a aplicacao como usuario, mas ainda nao substituem uma suite
 
 ## Tours de tutorial
 
-Os tutoriais sao fluxos narrativos maiores, diferentes dos testes atomicos:
+Os tutoriais sao fluxos narrativos maiores, diferentes dos testes atomicos. O roteiro completo fica em [TUTORIAL_STORYBOARD.md](TUTORIAL_STORYBOARD.md).
 
 1. `post-com-imagem`: cria uma publicacao com imagem, mostra a marcacao por `@`, publica e comenta.
 2. `post-com-video`: cria uma publicacao com MP4 curto, mostra preview de video e marcacao de pet.

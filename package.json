@@ -23,6 +23,7 @@
     "test:e2e": "playwright test --project=chromium",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:tutorial": "cross-env PLAYWRIGHT_VIDEO=on playwright test --project=tutorial-chromium && node tools/e2e/collect-tutorial-videos.mjs",
+    "tutorial:narrate": "node tools/e2e/render-narrated-tutorials.mjs",
     "quality": "npm run security:secrets && npm run lint && npm test && npm run test:e2e && npm run build",
     "smoke:dev": "node tools/smoke.mjs https://pet-place-dev.pages.dev",
     "smoke:prod": "node tools/smoke.mjs https://pet-place.pages.dev"
