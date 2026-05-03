@@ -6,6 +6,8 @@ export const VIDEO_UPLOAD_LIMITS = {
   supportedTypes: ['video/mp4'],
 };
 
+const MEDIA_EVENT_TIMEOUT_MS = 3500;
+
 export async function compressImage(file: File) {
   if (!file.type.startsWith('image/')) return file;
   try {
@@ -37,8 +39,8 @@ export async function validateVideoForUpload(file: File): Promise<string | null>
     if (Number.isFinite(duration) && duration > VIDEO_UPLOAD_LIMITS.maxDurationSeconds) {
       return 'O vídeo não pode passar de 60 segundos.';
     }
-  } catch {
-    return 'Não consegui ler este vídeo. Tente exportar como MP4 e enviar novamente.';
+  } catch (error) {
+    console.warn('Video metadata validation skipped:', error);
   }
 
   return null;
@@ -73,7 +75,7 @@ export async function createVideoPoster(file: File): Promise<File | null> {
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
     return blob ? new File([blob], `${stripExtension(file.name)}-poster.webp`, { type: 'image/webp' }) : null;
   } catch (error) {
-    console.warn('Video poster generation failed:', error);
+    console.warn('Video poster generation skipped:', error);
     return null;
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -82,7 +84,12 @@ export async function createVideoPoster(file: File): Promise<File | null> {
 
 function waitForVideoEvent(video: HTMLVideoElement, eventName: keyof HTMLMediaElementEventMap) {
   return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(`Video event "${eventName}" timed out.`));
+    }, MEDIA_EVENT_TIMEOUT_MS);
     const cleanup = () => {
+      window.clearTimeout(timeout);
       video.removeEventListener(eventName, onReady);
       video.removeEventListener('error', onError);
     };
@@ -103,7 +110,12 @@ function readVideoMetadata(file: File) {
   const objectUrl = URL.createObjectURL(file);
   return new Promise<{ duration: number; width: number; height: number }>((resolve, reject) => {
     const video = document.createElement('video');
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Video metadata read timed out.'));
+    }, MEDIA_EVENT_TIMEOUT_MS);
     const cleanup = () => {
+      window.clearTimeout(timeout);
       URL.revokeObjectURL(objectUrl);
       video.removeEventListener('loadedmetadata', onLoaded);
       video.removeEventListener('error', onError);

@@ -98,9 +98,12 @@ describe('project architecture guardrails', () => {
     expect(api).toContain('createVideoPoster');
     expect(uploads).toContain("'image/webp'");
     expect(uploads).toContain('validateVideoForUpload');
+    expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
+    expect(uploads).toContain('Video metadata validation skipped');
     expect(createPostModal).toContain('image/*,video/mp4');
     expect(createPostModal).not.toContain('video/quicktime');
     expect(createPostModal).not.toContain('video/webm');
+    expect(uploads).not.toContain('Tente exportar como MP4 e enviar novamente');
     expect(uploads).toContain("supportedTypes: ['video/mp4']");
     expect(postItem).toContain('poster={post.posterUrl}');
     expect(postItem).toContain('src={videoSrc}');
