@@ -51,6 +51,16 @@ describe('project architecture guardrails', () => {
     expect(subscriptions).toContain('matchesTopic');
   });
 
+  it('keeps post comment counts available before opening the comment drawer', () => {
+    const worker = read('worker/index.ts');
+    const postItem = read('src/components/PostItem.tsx');
+
+    expect(worker).toContain('COUNT(DISTINCT pc.id) AS comment_count');
+    expect(worker).toContain("commentCount: Number(row.comment_count || 0)");
+    expect(worker).toContain("action: 'comment-deleted'");
+    expect(postItem).toContain('visibleCommentCount');
+  });
+
   it('keeps legacy Firebase runtime files out of the public repo root', () => {
     const legacyFiles = [
       'firebase.json',

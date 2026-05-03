@@ -27,13 +27,19 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   // Comments
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<PostComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [showLikes, setShowLikes] = useState(false);
+  const visibleCommentCount = showComments && commentsLoaded ? comments.length : post.commentCount || 0;
   
   useEffect(() => {
     let unsub: () => void;
     if (showComments) {
-      unsub = subscribeToComments(post.id, setComments);
+      setCommentsLoaded(false);
+      unsub = subscribeToComments(post.id, (nextComments) => {
+        setComments(nextComments);
+        setCommentsLoaded(true);
+      });
     }
     return () => {
       if (unsub) unsub();
@@ -182,7 +188,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
             </button>
             <button onClick={() => setShowComments(!showComments)} className="text-ink-500 flex items-center gap-1 active:scale-95 transition-transform">
               <MessageCircle size={22} className={showComments ? "text-brand-500" : ""} />
-              <span className="text-sm font-medium">{comments.length > 0 ? comments.length : ''}</span>
+              <span className="text-sm font-medium">{visibleCommentCount > 0 ? visibleCommentCount : ''}</span>
             </button>
           </div>
           {(post.likedBy?.length || 0) > 0 && (

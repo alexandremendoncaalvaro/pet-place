@@ -80,6 +80,7 @@ export interface AppPost {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
   likedBy: string[];
+  commentCount?: number;
   tags?: string[];
   createdAt: string;
 }

@@ -1204,10 +1204,12 @@ async function listPosts(env: Env, limit: number): Promise<any[]> {
   const res = await env.DB.prepare(`
     SELECT p.*,
       GROUP_CONCAT(DISTINCT pl.user_id) AS liked_by,
-      GROUP_CONCAT(DISTINCT pt.user_id) AS tags
+      GROUP_CONCAT(DISTINCT pt.user_id) AS tags,
+      COUNT(DISTINCT pc.id) AS comment_count
     FROM posts p
     LEFT JOIN post_likes pl ON pl.post_id = p.id
     LEFT JOIN post_tags pt ON pt.post_id = p.id
+    LEFT JOIN post_comments pc ON pc.post_id = p.id
     GROUP BY p.id
     ORDER BY p.created_at DESC
     LIMIT ?
@@ -1224,6 +1226,7 @@ function rowToPost(row: any): any {
     mediaType: row.media_type || undefined,
     likedBy: row.liked_by ? String(row.liked_by).split(',') : [],
     tags: row.tags ? String(row.tags).split(',') : [],
+    commentCount: Number(row.comment_count || 0),
     createdAt: row.created_at,
   };
 }
@@ -1317,6 +1320,7 @@ async function deleteCommentRoute(env: Env, user: CurrentUser, commentId: string
   await env.DB.prepare('DELETE FROM post_comments WHERE id = ?').bind(commentId).run();
   if (comment?.post_id) {
     await publishRealtime(env, `comments:${comment.post_id}`, 'all', { postId: comment.post_id, commentId, action: 'deleted' });
+    await publishRealtime(env, 'posts', 'all', { postId: comment.post_id, commentId, action: 'comment-deleted' });
   }
   return json({ ok: true });
 }
