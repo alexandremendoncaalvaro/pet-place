@@ -1,5 +1,8 @@
 # Copy to .dev.vars for local wrangler dev. Never commit real secrets.
+APP_URL="http://localhost:8787"
+VAPID_SUBJECT="http://localhost:8787"
 SESSION_SECRET="dev-only-change-me"
+BOOTSTRAP_ADMIN_EMAIL=""
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 VAPID_PUBLIC_KEY=""
