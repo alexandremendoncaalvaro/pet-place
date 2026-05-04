@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar, ChevronDown } from 'lucide-react';
