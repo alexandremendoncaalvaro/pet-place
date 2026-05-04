@@ -28,6 +28,56 @@ Esse desenho mantém a API atrás dos domínios oficiais do app e reduz risco op
   - publica o proxy Pages `pet-place`;
   - roda smoke test em `https://pet-place.pages.dev`.
 
+## Política Oficial de Deploy
+
+O caminho oficial de deploy é sempre GitHub Actions. Deploy local direto com
+`wrangler deploy` ou `wrangler pages deploy` não deve ser usado para mudanças
+normais, porque publica código que pode não existir em commit/PR e quebra a
+rastreabilidade da revisão.
+
+Fluxo obrigatório:
+
+1. Criar branch de trabalho, normalmente `codex/...`.
+2. Fazer commits atômicos.
+3. Abrir PR contra `development`.
+4. Aguardar os checks obrigatórios do GitHub.
+5. Fazer merge para `development`; o workflow `Deploy Dev` publica o ambiente dev.
+6. Validar `https://pet-place-dev.pages.dev`.
+7. Promover de `development` para `main` por PR/merge quando estiver aprovado.
+
+Uso manual permitido:
+
+- `workflow_dispatch` no GitHub Actions para reexecutar a pipeline oficial,
+  mantendo auditoria no GitHub.
+- Comandos `wrangler` read-only para inspeção.
+- Emergência operacional aprovada explicitamente. Nesse caso, registrar depois
+  o incidente no PR/issue com commit, motivo, comandos executados, Worker
+  Version ID, Pages deployment e smoke test.
+
+Uso proibido no fluxo normal:
+
+- Deploy direto da máquina local para Cloudflare.
+- Deploy com worktree suja.
+- Deploy de código sem commit remoto.
+- Deploy para dev/prod a partir de branch que não corresponda ao ambiente.
+
+## Convenção de Branches
+
+A branch do ambiente de dev neste repositório é `development`. Ela cumpre o
+papel de "branch de dev" e é a única branch que dispara o workflow `Deploy Dev`.
+
+Branches antigas ou temporárias podem existir no repositório e devem ser
+limpas periodicamente. Elas não são ambientes. Criar ou usar uma branch `dev`
+paralela sem alterar os workflows quebraria a expectativa operacional, porque:
+
+- `Deploy Dev` escuta apenas `development`;
+- `Deploy Production` escuta apenas `main`;
+- o CI ignora `development` porque ela tem uma pipeline de deploy própria.
+
+Limpeza de branches deve preservar `main`, `development` e branches com PRs
+abertos. Antes de remover uma branch remota, confirmar que ela foi mergeada,
+abandonada explicitamente ou substituída por outra branch ativa.
+
 ## Secrets do GitHub
 
 Configure estes secrets no repositório:

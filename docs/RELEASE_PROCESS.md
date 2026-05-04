@@ -2,18 +2,35 @@
 
 ## Branches
 
-- `development`: ambiente de dev em `https://pet-place-dev.pages.dev`.
+- `development`: branch oficial do ambiente de dev em `https://pet-place-dev.pages.dev`.
 - `main`: produção em `https://pet-place.pages.dev`.
 - `codex/*`: branches de trabalho.
+
+Neste repositório, `development` é a branch de dev. Não existe branch remota
+`dev` para ambiente. Branches antigas ou temporárias podem existir e devem ser
+limpas separadamente, sem trocar a convenção de ambiente. Não criar uma branch
+`dev` paralela sem uma migração formal de CI/CD, porque ela não dispara o deploy
+dev atual.
 
 ## Fluxo
 
 1. Trabalhar em uma branch `codex/...`.
 2. Rodar `pnpm run quality`.
-3. Fazer merge para `development`.
-4. Validar manualmente no ambiente dev.
-5. Quando aprovado, fazer merge de `development` para `main`.
-6. A pipeline de produção aplica migrations, publica Worker/Pages e roda smoke test.
+3. Abrir PR contra `development`.
+4. Aguardar os checks obrigatórios do GitHub.
+5. Fazer merge para `development`.
+6. O GitHub Actions publica o ambiente dev.
+7. Validar manualmente no ambiente dev.
+8. Quando aprovado, fazer PR/merge de `development` para `main`.
+9. A pipeline de produção aplica migrations, publica Worker/Pages e roda smoke test.
+
+## Regra de Auditoria
+
+Deploy não é ação local; é evento auditado no GitHub Actions. O fluxo normal
+não permite `wrangler deploy` ou `wrangler pages deploy` direto da máquina de
+um desenvolvedor. Se uma emergência exigir esse caminho, ela precisa ser
+aprovada explicitamente e documentada depois com motivo, comandos, commit,
+Worker Version ID, Pages deployment e resultado do smoke.
 
 ## Versionamento
 

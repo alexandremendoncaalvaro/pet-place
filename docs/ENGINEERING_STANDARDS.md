@@ -49,6 +49,9 @@ Os workflows precisam rodar, nessa ordem:
 - deploy Pages proxy
 - smoke test pós-deploy
 
+Deploys de ambiente devem acontecer pelo GitHub Actions. Comandos locais de
+deploy para Cloudflare são exceção de emergência, não fluxo normal de trabalho.
+
 O comando local obrigatório antes de promover é:
 
 ```powershell
