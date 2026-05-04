@@ -5,9 +5,9 @@ O projeto usa Playwright para testes funcionais de navegador. A escolha segue o 
 ## Comandos
 
 ```powershell
-npm run test:e2e
-npm run test:e2e:headed
-npm run test:e2e:tutorial
+pnpm run test:e2e
+pnpm run test:e2e:headed
+pnpm run test:e2e:tutorial
 ```
 
 - `test:e2e`: roda a suite funcional em Chromium.

@@ -37,5 +37,5 @@ for (const [index, [name, pattern]] of titles.entries()) {
 }
 
 if (copied === 0) {
-  throw new Error('No tutorial videos found. Run npm run test:e2e:tutorial first.');
+  throw new Error('No tutorial videos found. Run pnpm run test:e2e:tutorial first.');
 }

@@ -10,9 +10,9 @@ updates:
       timezone: America/Sao_Paulo
     open-pull-requests-limit: 5
     groups:
-      npm-production:
+      pnpm-production:
         dependency-type: production
-      npm-development:
+      pnpm-development:
         dependency-type: development
     ignore:
       - dependency-name: typescript

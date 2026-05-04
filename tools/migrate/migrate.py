@@ -477,10 +477,10 @@ def remote_flag(args: argparse.Namespace) -> list[str]:
 
 
 def run_wranger(args: list[str], capture: bool = False) -> str:
-    npx = shutil.which("npx") or shutil.which("npx.cmd")
-    if not npx:
-        raise SystemExit("npx not found. Install Node.js/npm first.")
-    cmd = [npx, "wrangler", *args]
+    pnpm = shutil.which("pnpm") or shutil.which("pnpm.cmd")
+    if not pnpm:
+        raise SystemExit("pnpm not found. Install dependencies with pnpm first.")
+    cmd = [pnpm, "exec", "wrangler", *args]
     print("$", " ".join(cmd))
     result = subprocess.run(cmd, text=True, encoding="utf-8", errors="replace", capture_output=capture)
     if result.returncode != 0:
