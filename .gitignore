@@ -7,6 +7,8 @@ coverage/
 .env*
 !.env.example
 .dev.vars
+.mise.local.toml
+mise.local.toml
 .wrangler/
 .venv/
 __pycache__/

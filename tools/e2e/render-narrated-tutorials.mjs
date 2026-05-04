@@ -23,7 +23,7 @@ if (ttsEngine === 'piper') {
 for (const item of narration) {
   const inputVideo = join(generatedDir, `${item.id}.webm`);
   if (!existsSync(inputVideo)) {
-    throw new Error(`Missing ${inputVideo}. Run npm run test:e2e:tutorial first.`);
+    throw new Error(`Missing ${inputVideo}. Run pnpm run test:e2e:tutorial first.`);
   }
 
   const textPath = join(tempDir, `${item.id}.txt`);

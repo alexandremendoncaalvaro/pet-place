@@ -20,7 +20,7 @@ export interface Payment {
   familyId: string;
   month: string;
   amount: number;
-  proofUrl: string;
+  proofUrl?: string;
   status: PaymentStatus;
   type?: 'mensalidade' | 'doacao' | 'rateio';
   description?: string;
@@ -36,7 +36,7 @@ export interface Expense {
   title: string;
   category: string;
   amount: number;
-  receiptUrl: string;
+  receiptUrl?: string;
   createdBy: string;
   createdAt: string;
 }

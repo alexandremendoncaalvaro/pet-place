@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const skippedPathPatterns = [
   /^assets\//,
@@ -7,7 +7,7 @@ const skippedPathPatterns = [
   /^node_modules\//,
   /^tools\/migrate\/\.venv\//,
   /^tools\/migrate\/uv\.lock$/,
-  /^package-lock\.json$/,
+  /^pnpm-lock\.yaml$/,
 ];
 
 const binaryExtensions = new Set([
@@ -72,6 +72,7 @@ function isPlaceholder(value) {
 const findings = [];
 
 for (const file of listedFiles()) {
+  if (!existsSync(file)) continue;
   if (shouldSkip(file)) continue;
 
   const content = readFileSync(file, 'utf8');

@@ -94,8 +94,8 @@ Mesmo com Piper, a narracao sintetica deve ser tratada como rascunho de document
 Comando:
 
 ```powershell
-npm run test:e2e:tutorial
-npm run tutorial:narrate
+pnpm run test:e2e:tutorial
+pnpm run tutorial:narrate
 ```
 
 Saidas geradas:

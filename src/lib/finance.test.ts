@@ -73,4 +73,14 @@ describe('cash ledger', () => {
       amount: 150,
     });
   });
+
+  it('keeps ledger items usable when financial media URLs are redacted', () => {
+    const ledger = buildCashLedger(
+      [{ ...basePayment, proofUrl: '' }],
+      [{ ...baseExpense, receiptUrl: '' }],
+    );
+
+    expect(ledger).toHaveLength(2);
+    expect(ledger.every((item) => !item.proofUrl)).toBe(true);
+  });
 });

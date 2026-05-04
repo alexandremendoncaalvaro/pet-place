@@ -2,6 +2,9 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { commentNotification, likeNotification } from '../src/lib/notificationPolicy';
+import { serializeExpense, serializePayment } from './financialRecords';
+import { mediaUrl } from './media';
+import { accessFamilyId, canAccessMediaReference, type MediaAccessReference } from './security';
 
 type Role = 'admin' | 'resident';
 type PaymentStatus = 'pending' | 'analyzing' | 'approved' | 'rejected';
@@ -239,7 +242,7 @@ async function routePaymentsApi(path: string, method: string, request: Request, 
 }
 
 async function routeExpensesApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
-  if (path === '/expenses' && method === 'GET') return json({ expenses: await listExpenses(env) });
+  if (path === '/expenses' && method === 'GET') return json({ expenses: await listExpenses(env, { includeReceipts: user.role === 'admin' }) });
   if (path === '/expenses' && method === 'POST') {
     requireAdmin(user);
     return addExpenseRoute(request, env, user);
@@ -352,9 +355,10 @@ function bool(value: unknown): number {
   return value ? 1 : 0;
 }
 
-function mediaUrl(key?: string | null, fallback?: string | null): string {
-  if (key) return `/api/media/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
-  return fallback || '';
+function positiveAmount(value: FormDataEntryValue | number | string | null, message = 'Valor inválido.'): number {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(message, 400);
+  return amount;
 }
 
 function requireAdmin(user: CurrentUser): void {
@@ -365,9 +369,7 @@ function isSelfOrAdmin(user: CurrentUser, id: string): boolean {
   return user.uid === id || user.role === 'admin';
 }
 
-function familyId(user: CurrentUser): string {
-  return user.familyId || user.uid;
-}
+const familyId = accessFamilyId;
 
 async function googleStart(request: Request, env: Env): Promise<Response> {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return bad('OAuth do Google não está configurado.', 500);
@@ -530,6 +532,8 @@ async function updateUserRoute(request: Request, env: Env, user: CurrentUser, us
   if (!existing) return bad('Usuário não encontrado.', 404);
   const role = user.role === 'admin' && data.role ? data.role : existing.role;
   const userStatus = user.role === 'admin' && data.userStatus ? data.userStatus : existing.userStatus;
+  if (!['admin', 'resident'].includes(role)) return bad('Papel inválido.', 400);
+  if (!['pending', 'active', 'blocked'].includes(userStatus)) return bad('Status de usuário inválido.', 400);
   const family = data.familyId !== undefined ? data.familyId || null : existing.familyId || null;
   const photo = form.get('photo');
   let photoKey: string | null = null;
@@ -760,14 +764,14 @@ async function listPaymentsRoute(url: URL, env: Env, user: CurrentUser): Promise
   const all = url.searchParams.get('all') === '1';
   const requestedFamily = url.searchParams.get('familyId');
   if (all) {
-    return json({ payments: await listPayments(env) });
+    return json({ payments: await listPayments(env, undefined, { includeProofs: user.role === 'admin' }) });
   }
   const targetFamilyId = requestedFamily || familyId(user);
   if (targetFamilyId !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para estes pagamentos.', 403);
-  return json({ payments: await listPayments(env, targetFamilyId) });
+  return json({ payments: await listPayments(env, targetFamilyId, { includeProofs: true }) });
 }
 
-async function listPayments(env: Env, onlyFamilyId?: string): Promise<any[]> {
+async function listPayments(env: Env, onlyFamilyId?: string, options: { includeProofs?: boolean } = {}): Promise<any[]> {
   const sql = `
     SELECT p.*, u.name AS user_name, u.dog_name AS user_dog
     FROM payments p
@@ -778,20 +782,7 @@ async function listPayments(env: Env, onlyFamilyId?: string): Promise<any[]> {
   const res = onlyFamilyId
     ? await env.DB.prepare(sql).bind(onlyFamilyId).all<any>()
     : await env.DB.prepare(sql).all<any>();
-  return (res.results || []).map((row) => ({
-    id: row.id,
-    familyId: row.family_id,
-    month: row.month,
-    amount: row.amount,
-    proofUrl: mediaUrl(row.proof_key, row.proof_url),
-    status: row.status,
-    type: row.type || undefined,
-    description: row.description || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    userName: row.user_name || undefined,
-    userDog: row.user_dog || undefined,
-  }));
+  return (res.results || []).map((row) => serializePayment(row, options));
 }
 
 async function submitDonationRoute(request: Request, env: Env, user: CurrentUser): Promise<Response> {
@@ -800,16 +791,17 @@ async function submitDonationRoute(request: Request, env: Env, user: CurrentUser
   if (!(file instanceof File)) return bad('Comprovante ausente.', 400);
   const targetFamilyId = String(form.get('familyId') || familyId(user));
   if (targetFamilyId !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para esta família.', 403);
+  const amount = positiveAmount(form.get('amount'));
   const timestamp = now();
   const proofKey = await putFile(env, 'proofs', file);
   const id = newId('donation');
   await env.DB.prepare(`
     INSERT INTO payments (id, family_id, month, amount, proof_key, proof_url, status, type, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, '', 'analyzing', 'doacao', ?, ?)
-  `).bind(id, targetFamilyId, timestamp.slice(0, 7), Number(form.get('amount') || 0), proofKey, timestamp, timestamp).run();
-  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${Number(form.get('amount') || 0).toFixed(2)} aguarda análise.`);
+  `).bind(id, targetFamilyId, timestamp.slice(0, 7), amount, proofKey, timestamp, timestamp).run();
+  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${amount.toFixed(2)} aguarda análise.`);
   await publishRealtime(env, 'payments', 'all', { paymentId: id, familyId: targetFamilyId, action: 'created' });
-  return json({ payment: (await listPayments(env, targetFamilyId)).find((p) => p.id === id) });
+  return json({ payment: (await listPayments(env, targetFamilyId, { includeProofs: true })).find((p) => p.id === id) });
 }
 
 async function createManualPaymentRoute(request: Request, env: Env, _user: CurrentUser): Promise<Response> {
@@ -818,12 +810,11 @@ async function createManualPaymentRoute(request: Request, env: Env, _user: Curre
   if (!(file instanceof File)) return bad('Comprovante ausente.', 400);
 
   const familyIdValue = String(form.get('familyId') || '');
-  const amount = Number(form.get('amount') || 0);
+  const amount = positiveAmount(form.get('amount'));
   const month = String(form.get('month') || now().slice(0, 7));
   const type = String(form.get('type') || 'mensalidade');
   const description = String(form.get('description') || '').trim() || null;
   if (!familyIdValue) return bad('Pessoa obrigatoria.', 400);
-  if (!amount || amount <= 0) return bad('Valor invalido.', 400);
   if (!['mensalidade', 'doacao', 'rateio'].includes(type)) return bad('Tipo invalido.', 400);
 
   const timestamp = now();
@@ -845,7 +836,7 @@ async function createManualPaymentRoute(request: Request, env: Env, _user: Curre
         WHERE id = ?
       `).bind(amount, proofKey, description, timestamp, paymentId).run();
       await publishRealtime(env, 'payments', 'all', { paymentId, familyId: familyIdValue, action: 'updated' });
-      return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) });
+      return json({ payment: (await listPayments(env, familyIdValue, { includeProofs: true })).find((payment) => payment.id === paymentId) });
     }
   }
 
@@ -855,7 +846,7 @@ async function createManualPaymentRoute(request: Request, env: Env, _user: Curre
   `).bind(paymentId, familyIdValue, month, amount, proofKey, type, description, timestamp, timestamp).run();
 
   await publishRealtime(env, 'payments', 'all', { paymentId, familyId: familyIdValue, action: 'created' });
-  return json({ payment: (await listPayments(env, familyIdValue)).find((payment) => payment.id === paymentId) }, 201);
+  return json({ payment: (await listPayments(env, familyIdValue, { includeProofs: true })).find((payment) => payment.id === paymentId) }, 201);
 }
 
 async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, paymentId: string): Promise<Response> {
@@ -895,8 +886,9 @@ async function createChargesRoute(request: Request, env: Env): Promise<Response>
   const timestamp = now();
   const statements = (body.charges || []).map((charge) => {
     const type = charge.type || 'mensalidade';
-    const amount = Number(charge.amount || 0);
+    const amount = positiveAmount(charge.amount);
     const status = charge.status || 'pending';
+    if (!['pending', 'analyzing', 'approved', 'rejected'].includes(status)) throw new HttpError('Status inválido.', 400);
     const description = charge.description || null;
     if (type === 'mensalidade') {
       return env.DB.prepare(`
@@ -939,18 +931,9 @@ async function createChargesRoute(request: Request, env: Env): Promise<Response>
   return json({ ok: true });
 }
 
-async function listExpenses(env: Env): Promise<any[]> {
+async function listExpenses(env: Env, options: { includeReceipts?: boolean } = {}): Promise<any[]> {
   const res = await env.DB.prepare('SELECT * FROM expenses ORDER BY date DESC, created_at DESC').all<any>();
-  return (res.results || []).map((row) => ({
-    id: row.id,
-    date: row.date,
-    title: row.title,
-    category: row.category,
-    amount: row.amount,
-    receiptUrl: mediaUrl(row.receipt_key, row.receipt_url),
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-  }));
+  return (res.results || []).map((row) => serializeExpense(row, options));
 }
 
 async function addExpenseRoute(request: Request, env: Env, user: CurrentUser): Promise<Response> {
@@ -958,14 +941,15 @@ async function addExpenseRoute(request: Request, env: Env, user: CurrentUser): P
   const data = parseFormJson<any>(form, 'data');
   const file = form.get('file');
   if (!(file instanceof File)) return bad('Recibo ausente.', 400);
+  const amount = positiveAmount(data.amount);
   const key = await putFile(env, 'receipts', file);
   const id = newId('exp');
   await env.DB.prepare(`
     INSERT INTO expenses (id, date, title, category, amount, receipt_key, receipt_url, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)
-  `).bind(id, data.date, data.title, data.category, Number(data.amount || 0), key, user.uid, data.createdAt || now()).run();
+  `).bind(id, data.date, data.title, data.category, amount, key, user.uid, data.createdAt || now()).run();
   await publishRealtime(env, 'expenses', 'all', { expenseId: id, action: 'created' });
-  return json({ expense: (await listExpenses(env)).find((e) => e.id === id) });
+  return json({ expense: (await listExpenses(env, { includeReceipts: true })).find((e) => e.id === id) });
 }
 
 async function listPets(env: Env, ownerId?: string): Promise<any[]> {
@@ -1382,8 +1366,11 @@ async function savePushSubscriptionRoute(request: Request, env: Env, user: Curre
   return json({ ok: true });
 }
 
-async function serveMedia(key: string, request: Request, env: Env, _user: CurrentUser): Promise<Response> {
+async function serveMedia(key: string, request: Request, env: Env, user: CurrentUser): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
+  const accessReference = await resolveMediaAccessReference(env, decodedKey);
+  if (!canAccessMediaReference(user, accessReference)) throw new HttpError('Sem permissão para esta mídia.', 403);
+
   const rangeHeader = request.headers.get('Range');
   const head = await env.MEDIA.head(decodedKey);
   if (!head) return bad('Mídia não encontrada.', 404);
@@ -1416,6 +1403,34 @@ async function serveMedia(key: string, request: Request, env: Env, _user: Curren
   }
   headers.set('Content-Length', String(object.size));
   return new Response(object.body, { headers });
+}
+
+async function resolveMediaAccessReference(env: Env, key: string): Promise<MediaAccessReference> {
+  if (key.startsWith('proofs/')) {
+    const payment = await env.DB.prepare('SELECT family_id FROM payments WHERE proof_key = ? LIMIT 1').bind(key).first<any>();
+    return payment?.family_id ? { kind: 'payment-proof', familyId: payment.family_id } : { kind: 'unknown' };
+  }
+  if (key.startsWith('receipts/')) {
+    const expense = await env.DB.prepare('SELECT id FROM expenses WHERE receipt_key = ? LIMIT 1').bind(key).first<any>();
+    return expense ? { kind: 'expense-receipt' } : { kind: 'unknown' };
+  }
+  if (key.startsWith('users/')) {
+    const user = await env.DB.prepare('SELECT id FROM users WHERE photo_key = ? LIMIT 1').bind(key).first<any>();
+    return user ? { kind: 'public-media' } : { kind: 'unknown' };
+  }
+  if (key.startsWith('pets/')) {
+    const pet = await env.DB.prepare('SELECT id FROM pets WHERE photo_key = ? LIMIT 1').bind(key).first<any>();
+    return pet ? { kind: 'public-media' } : { kind: 'unknown' };
+  }
+  if (key.startsWith('posts/')) {
+    const post = await env.DB.prepare('SELECT id FROM posts WHERE media_key = ? LIMIT 1').bind(key).first<any>();
+    return post ? { kind: 'public-media' } : { kind: 'unknown' };
+  }
+  if (key.startsWith('posters/')) {
+    const post = await env.DB.prepare('SELECT id FROM posts WHERE poster_key = ? LIMIT 1').bind(key).first<any>();
+    return post ? { kind: 'public-media' } : { kind: 'unknown' };
+  }
+  return { kind: 'unknown' };
 }
 
 function parseByteRange(header: string, objectSize: number): R2Range | null {
