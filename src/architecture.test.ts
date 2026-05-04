@@ -114,6 +114,19 @@ describe('project architecture guardrails', () => {
     expect(worker).toContain('const amount = positiveAmount(data.amount);');
   });
 
+  it('backfills recurring supporters without charging new families by default', () => {
+    const migration = read('migrations/0008_supporter_subscriptions.sql');
+    const worker = read('worker/index.ts');
+    const appContext = read('src/context/AppContext.tsx');
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS supporter_subscriptions');
+    expect(migration).toContain("WHERE user_status != 'blocked'");
+    expect(migration).toContain("WHERE type IS NULL OR type = 'mensalidade'");
+    expect(worker).toContain("reason: 'not-supporter'");
+    expect(worker).toContain('processMonthlySupporterPayments');
+    expect(appContext).toContain('isSupporterActiveForMonth(mySupporter, currentMonth)');
+  });
+
   it('keeps financial media private while preserving the authenticated transparency ledger', () => {
     const worker = read('worker/index.ts');
     const mediaPolicy = read('worker/security.ts');

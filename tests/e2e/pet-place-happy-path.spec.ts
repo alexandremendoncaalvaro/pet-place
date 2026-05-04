@@ -107,3 +107,37 @@ test('10 - admin registra pagamento externo com comprovante', async ({ page }) =
   await expect(page.getByText(/Pessoa e comprovante registrados/)).toBeVisible();
   expect(state.payments.some((payment) => payment.familyId.startsWith('offline-') && payment.amount === 25)).toBe(true);
 });
+
+test('11 - nova familia nao apoiadora ve convite e nao recebe mensalidade automatica', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
+  state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
+  await page.reload();
+  await expect(page.getByText(/Seja um apoiador recorrente|Ajude a manter o PetPlace/)).toBeVisible();
+  await expect(page.getByText(/Mensalidade:/)).not.toBeVisible();
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade')).toBe(false);
+});
+
+test('12 - perfil permite virar apoiador recorrente e cria mensalidade', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
+  state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
+  await page.reload();
+  await page.getByRole('button', { name: /Virar apoiador/ }).first().click();
+  await page.getByRole('button', { name: /Virar apoiador recorrente/ }).click();
+  await expect(page.getByText(/Você agora é apoiador recorrente/)).toBeVisible();
+  expect(state.supporters.some((supporter) => supporter.familyId === 'family-resident' && supporter.status === 'active')).toBe(true);
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade' && payment.status === 'pending')).toBe(true);
+});
+
+test('13 - pausar apoio pode cancelar mensalidade pendente do mes', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.payments = state.payments.map((payment) => payment.id === 'payment-resident-may' ? { ...payment, status: 'pending', proofUrl: '' } : payment);
+  await page.reload();
+  await page.getByRole('button', { name: 'Meu Perfil' }).click();
+  await page.getByRole('button', { name: /Pausar apoio recorrente/ }).click();
+  await page.getByRole('button', { name: /Cancelar pendência/ }).click();
+  await expect(page.getByText(/pendência do mês cancelada/)).toBeVisible();
+  expect(state.supporters.find((supporter) => supporter.familyId === 'family-resident')?.status).toBe('paused');
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.month === '2026-05' && payment.status === 'pending')).toBe(false);
+});

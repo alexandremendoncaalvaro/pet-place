@@ -49,6 +49,16 @@ export interface AppConfig {
   updatedAt: string;
 }
 
+export interface SupporterSubscription {
+  familyId: string;
+  status: 'active' | 'paused';
+  activeSinceMonth?: string;
+  pausedAt?: string;
+  source: 'migration' | 'self' | 'admin';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Pet {
   id: string;
   ownerId: string;

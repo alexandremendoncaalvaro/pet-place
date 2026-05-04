@@ -2,12 +2,14 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { commentNotification, likeNotification } from '../src/lib/notificationPolicy';
+import { getSupporterStartMonth, isSupporterActiveForMonth } from '../src/lib/supporters';
 import { serializeExpense, serializePayment } from './financialRecords';
 import { mediaUrl } from './media';
 import { accessFamilyId, canAccessMediaReference, type MediaAccessReference } from './security';
 
 type Role = 'admin' | 'resident';
 type PaymentStatus = 'pending' | 'analyzing' | 'approved' | 'rejected';
+type SupporterStatus = 'active' | 'paused';
 
 interface Env {
   DB: D1Database;
@@ -41,6 +43,16 @@ interface CurrentUser {
   userStatus: 'pending' | 'active' | 'blocked';
   isOffline?: boolean;
   createdAt: string;
+}
+
+interface SupporterSubscription {
+  familyId: string;
+  status: SupporterStatus;
+  activeSinceMonth?: string;
+  pausedAt?: string;
+  source: 'migration' | 'self' | 'admin';
+  createdAt: string;
+  updatedAt: string;
 }
 
 type RealtimeTarget = 'all' | 'admins' | string;
@@ -124,6 +136,7 @@ export default {
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(processScheduledEvents(env));
+    ctx.waitUntil(processMonthlySupporterPayments(env));
   },
 };
 
@@ -142,6 +155,7 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     await routeMediaApi(path, method, request, env, user) ||
     await routeConfigApi(path, method, request, env, user) ||
     await routeUsersApi(path, method, request, env, user) ||
+    await routeSupportersApi(path, method, request, url, env, user) ||
     await routePaymentsApi(path, method, request, url, env, user) ||
     await routeExpensesApi(path, method, request, env, user) ||
     await routePetsApi(path, method, request, url, env, user) ||
@@ -217,6 +231,27 @@ async function routeUsersApi(path: string, method: string, request: Request, env
     await deleteUser(env, path.split('/')[2]);
     return json({ ok: true });
   }
+  return null;
+}
+
+async function routeSupportersApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path === '/supporters' && method === 'GET') {
+    const all = url.searchParams.get('all') === '1';
+    if (all) {
+      requireAdmin(user);
+      return json({ supporters: await listSupporterSubscriptions(env) });
+    }
+    const requestedFamily = url.searchParams.get('familyId') || familyId(user);
+    if (requestedFamily !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para esta família.', 403);
+    return json({ supporter: await getSupporterSubscription(env, requestedFamily) });
+  }
+
+  if (path.match(/^\/supporters\/[^/]+$/) && method === 'PATCH') {
+    const targetFamilyId = decodeURIComponent(path.split('/')[2]);
+    if (targetFamilyId !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para alterar este apoio.', 403);
+    return updateSupporterSubscriptionRoute(request, env, user, targetFamilyId);
+  }
+
   return null;
 }
 
@@ -665,6 +700,7 @@ async function updateIdentityLinkSuggestionRoute(request: Request, env: Env, use
             AND approved.id != payments.id
         )
     `).bind(sourceFamily).run();
+    await mergeSupporterSubscriptions(env, sourceFamily, targetFamily, timestamp);
   }
 
   await env.DB.prepare(`
@@ -686,6 +722,7 @@ async function deleteUser(env: Env, userId: string): Promise<void> {
     env.DB.prepare('DELETE FROM pets WHERE owner_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM posts WHERE author_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM payments WHERE family_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM supporter_subscriptions WHERE family_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ]);
   await publishRealtime(env, 'users', 'admins', { userId, action: 'deleted' });
@@ -738,6 +775,112 @@ async function updateConfig(env: Env, data: any): Promise<any> {
   return updated;
 }
 
+function rowToSupporter(row: any, fallbackFamilyId?: string): SupporterSubscription {
+  return {
+    familyId: row?.family_id || fallbackFamilyId || '',
+    status: row?.status === 'active' ? 'active' : 'paused',
+    activeSinceMonth: row?.active_since_month || undefined,
+    pausedAt: row?.paused_at || undefined,
+    source: row?.source || 'self',
+    createdAt: row?.created_at || '',
+    updatedAt: row?.updated_at || '',
+  };
+}
+
+async function getSupporterSubscription(env: Env, targetFamilyId: string): Promise<SupporterSubscription> {
+  const row = await env.DB.prepare('SELECT * FROM supporter_subscriptions WHERE family_id = ?').bind(targetFamilyId).first<any>();
+  return rowToSupporter(row, targetFamilyId);
+}
+
+async function listSupporterSubscriptions(env: Env): Promise<SupporterSubscription[]> {
+  const rows = await env.DB.prepare('SELECT * FROM supporter_subscriptions ORDER BY updated_at DESC').all<any>();
+  return (rows.results || []).map((row) => rowToSupporter(row));
+}
+
+async function isFamilyActiveSupporter(env: Env, targetFamilyId: string, month: string): Promise<boolean> {
+  return isSupporterActiveForMonth(await getSupporterSubscription(env, targetFamilyId), month);
+}
+
+async function mergeSupporterSubscriptions(env: Env, sourceFamily: string, targetFamily: string, timestamp: string): Promise<void> {
+  if (sourceFamily === targetFamily) return;
+  const source = await getSupporterSubscription(env, sourceFamily);
+  const target = await getSupporterSubscription(env, targetFamily);
+  if (target.status === 'active' && source.status !== 'active') {
+    await env.DB.prepare(`
+      INSERT INTO supporter_subscriptions (family_id, status, active_since_month, paused_at, source, created_at, updated_at)
+      VALUES (?, 'active', ?, NULL, ?, ?, ?)
+      ON CONFLICT(family_id) DO UPDATE SET
+        status = 'active',
+        active_since_month = excluded.active_since_month,
+        paused_at = NULL,
+        source = excluded.source,
+        updated_at = excluded.updated_at
+    `).bind(
+      sourceFamily,
+      target.activeSinceMonth || new Date().toISOString().slice(0, 7),
+      target.source,
+      source.createdAt || timestamp,
+      timestamp,
+    ).run();
+  }
+  await env.DB.prepare('DELETE FROM supporter_subscriptions WHERE family_id = ?').bind(targetFamily).run();
+  await publishRealtime(env, 'supporters', 'all', { familyId: sourceFamily, action: 'identity-link-resolved' });
+}
+
+async function updateSupporterSubscriptionRoute(request: Request, env: Env, user: CurrentUser, targetFamilyId: string): Promise<Response> {
+  const body = await request.json<{ status?: SupporterStatus; cancelCurrentPending?: boolean }>();
+  if (body.status !== 'active' && body.status !== 'paused') return bad('Status de apoio inválido.', 400);
+
+  const existing = await getSupporterSubscription(env, targetFamilyId);
+  const timestamp = now();
+  const source = user.role === 'admin' && targetFamilyId !== familyId(user) ? 'admin' : 'self';
+  const config = await getConfig(env);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const activeSinceMonth = body.status === 'active'
+    ? existing.status === 'active'
+      ? existing.activeSinceMonth || getSupporterStartMonth(new Date(), config?.dueDateDay || 10)
+      : getSupporterStartMonth(new Date(), config?.dueDateDay || 10)
+    : existing.activeSinceMonth || null;
+
+  await env.DB.prepare(`
+    INSERT INTO supporter_subscriptions (family_id, status, active_since_month, paused_at, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(family_id) DO UPDATE SET
+      status = excluded.status,
+      active_since_month = excluded.active_since_month,
+      paused_at = excluded.paused_at,
+      source = excluded.source,
+      updated_at = excluded.updated_at
+  `).bind(
+    targetFamilyId,
+    body.status,
+    activeSinceMonth,
+    body.status === 'paused' ? timestamp : null,
+    source,
+    existing.createdAt || timestamp,
+    timestamp,
+  ).run();
+
+  if (body.status === 'paused' && body.cancelCurrentPending) {
+    await env.DB.prepare(`
+      DELETE FROM payments
+      WHERE family_id = ?
+        AND month = ?
+        AND (type IS NULL OR type = 'mensalidade')
+        AND status IN ('pending', 'rejected')
+    `).bind(targetFamilyId, currentMonth).run();
+    await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month: currentMonth, action: 'supporter-paused' });
+  }
+
+  if (body.status === 'active' && activeSinceMonth === currentMonth) {
+    await ensureMonthlyPaymentForFamily(env, targetFamilyId, currentMonth, config?.monthlyAmount || 0);
+  }
+
+  await publishRealtime(env, 'supporters', 'all', { familyId: targetFamilyId, status: body.status });
+  if (body.status === 'active') await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month: currentMonth, action: 'supporter-active' });
+  return json({ supporter: await getSupporterSubscription(env, targetFamilyId) });
+}
+
 async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: CurrentUser): Promise<Response> {
   const body = await request.json<{ familyId: string }>();
   const targetFamilyId = body.familyId || familyId(user);
@@ -745,6 +888,12 @@ async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: 
   const config = await getConfig(env);
   if (!config) return json({ ok: true, skipped: true });
   const month = new Date().toISOString().slice(0, 7);
+  if (!await isFamilyActiveSupporter(env, targetFamilyId, month)) return json({ ok: true, skipped: true, reason: 'not-supporter' });
+  const created = await ensureMonthlyPaymentForFamily(env, targetFamilyId, month, config.monthlyAmount);
+  return json({ ok: true, created });
+}
+
+async function ensureMonthlyPaymentForFamily(env: Env, targetFamilyId: string, month: string, amount: number): Promise<boolean> {
   const existing = await env.DB.prepare(`
     SELECT id FROM payments
     WHERE family_id = ? AND month = ? AND (type IS NULL OR type = 'mensalidade')
@@ -754,10 +903,11 @@ async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: 
     await env.DB.prepare(`
       INSERT INTO payments (id, family_id, month, amount, proof_url, status, type, created_at, updated_at)
       VALUES (?, ?, ?, ?, '', 'pending', 'mensalidade', ?, ?)
-    `).bind(newId('pay'), targetFamilyId, month, config.monthlyAmount, timestamp, timestamp).run();
+    `).bind(newId('pay'), targetFamilyId, month, amount, timestamp, timestamp).run();
     await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month, action: 'created' });
+    return true;
   }
-  return json({ ok: true });
+  return false;
 }
 
 async function listPaymentsRoute(url: URL, env: Env, user: CurrentUser): Promise<Response> {
@@ -1512,6 +1662,63 @@ async function processScheduledEvents(env: Env): Promise<void> {
   }
 }
 
+async function processMonthlySupporterPayments(env: Env): Promise<void> {
+  const config = await getConfig(env);
+  if (!config || !Number.isFinite(config.monthlyAmount) || config.monthlyAmount <= 0) return;
+  const current = new Date();
+  const month = current.toISOString().slice(0, 7);
+  const supporters = await env.DB.prepare(`
+    SELECT *
+    FROM supporter_subscriptions
+    WHERE status = 'active'
+      AND (active_since_month IS NULL OR active_since_month <= ?)
+  `).bind(month).all<any>();
+
+  for (const supporter of supporters.results || []) {
+    await ensureMonthlyPaymentForFamily(env, supporter.family_id, month, config.monthlyAmount);
+    if (current.getUTCDate() >= Number(config.dueDateDay || 10)) {
+      await notifyFamilyAboutPendingMonthlyPayment(env, supporter.family_id, month, config);
+    }
+  }
+}
+
+async function notifyFamilyAboutPendingMonthlyPayment(env: Env, targetFamilyId: string, month: string, config: any): Promise<void> {
+  const payment = await env.DB.prepare(`
+    SELECT *
+    FROM payments
+    WHERE family_id = ?
+      AND month = ?
+      AND (type IS NULL OR type = 'mensalidade')
+      AND status IN ('pending', 'rejected')
+    LIMIT 1
+  `).bind(targetFamilyId, month).first<any>();
+  if (!payment) return;
+
+  const users = await env.DB.prepare(`
+    SELECT id
+    FROM users
+    WHERE user_status = 'active'
+      AND COALESCE(NULLIF(family_id, ''), id) = ?
+  `).bind(targetFamilyId).all<any>();
+
+  for (const row of users.results || []) {
+    const aggregationKey = `payment_due:${targetFamilyId}:${month}`;
+    const existing = await env.DB.prepare(`
+      SELECT id FROM notifications
+      WHERE user_id = ? AND aggregation_key = ?
+      LIMIT 1
+    `).bind(row.id, aggregationKey).first<any>();
+    if (existing) continue;
+    await insertNotification(env, row.id, 'Mensalidade do PetPlace', `A contribuição de R$ ${Number(config.monthlyAmount).toFixed(2)} vence no dia ${config.dueDateDay}.`, {
+      type: 'payment',
+      entityType: 'payment',
+      entityId: payment.id,
+      aggregationKey,
+      data: { paymentId: payment.id, month },
+    });
+  }
+}
+
 async function sendPushForTarget(env: Env, target: string): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return;
   const sql = target === 'all'
@@ -1545,7 +1752,7 @@ async function sendWebPush(env: Env, row: any): Promise<void> {
 }
 
 async function backup(env: Env): Promise<Record<string, unknown[]>> {
-  const tables = ['users', 'settings', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions', 'identity_link_suggestions'];
+  const tables = ['users', 'settings', 'supporter_subscriptions', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions', 'identity_link_suggestions'];
   const out: Record<string, unknown[]> = {};
   for (const table of tables) {
     const res = await env.DB.prepare(`SELECT * FROM ${table}`).all();

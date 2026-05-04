@@ -122,7 +122,12 @@ export function MainApp() {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
-        {activeTab === 'home' && <ResidentDashboard />}
+        {activeTab === 'home' && (
+          <ResidentDashboard
+            onBecomeSupporter={() => setActiveTab('perfil')}
+            onOpenTransparency={() => setActiveTab('transparencia')}
+          />
+        )}
         {activeTab === 'mural' && <MuralView />}
         {activeTab === 'transparencia' && <TransparenciaView />}
         {activeTab === 'directory' && <DirectoryView />}
