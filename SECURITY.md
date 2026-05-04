@@ -9,13 +9,17 @@ Only the code deployed from `main` is supported for production fixes.
 
 ## Secret Handling
 
-- Never commit `.env`, `.dev.vars`, Cloudflare tokens, OAuth secrets, VAPID
-  private keys, service account files, database exports, or production backups.
+- Never commit `.env`, `.dev.vars`, `.mise.local.toml`, Cloudflare tokens,
+  OAuth secrets, VAPID private keys, service account files, database exports,
+  or production backups.
 - Runtime secrets must live in Cloudflare or GitHub Actions secrets.
 - Local secret files are ignored by Git and should stay local.
-- `npm run security:secrets` scans the current tracked tree for common
+- `pnpm run security:secrets` scans the current tracked tree for common
   hard-coded secrets.
 - GitHub Secret Scanning and push protection are enabled for the repository.
+
+Runtime authorization invariants are documented in
+[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md).
 
 ## Reporting
 

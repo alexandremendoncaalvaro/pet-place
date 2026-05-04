@@ -17,8 +17,9 @@ Este app deve continuar simples, mas não informal. A regra é: pouca arquitetur
 - Telefone brasileiro deve ser armazenado normalizado, sem pontuação e sem `+55` quando nacional. Exemplo canônico: `47999999999`.
 - UI deve mostrar telefone como `(47) 99999-9999`.
 - Comprovantes e recibos sobem como arquivo original. Não comprimir documento financeiro.
+- Comprovantes de terceiros e recibos não entram em payload público de transparência.
 - Mutações devem chamar `notifyDataChanged()` somente quando a UI precisa refazer leituras imediatamente.
-- Polling deve ser moderado. Default atual: 60s. Conteúdo social/notificações/comentários: 30s.
+- Polling deve ser moderado. Default atual: 120s, com invalidação por topic quando realtime estiver ativo.
 - Service workers devem ter escopo claro, atualização previsível e limpeza de caches incompatíveis.
 - Toda regra pura nova deve ganhar teste unitário.
 - Toda migration D1 deve ser idempotente quando possível e segura para rodar na esteira.
@@ -37,12 +38,12 @@ Este app deve continuar simples, mas não informal. A regra é: pouca arquitetur
 
 Os workflows precisam rodar, nessa ordem:
 
-- `npm ci`
-- `npm run security:secrets`
-- `npm run lint`
-- `npm test`
-- `npm run test:e2e`
-- `npm run build`
+- `pnpm install --frozen-lockfile`
+- `pnpm run security:secrets`
+- `pnpm run lint`
+- `pnpm test`
+- `pnpm run test:e2e`
+- `pnpm run build`
 - migrations D1 remotas, apenas nos deploys
 - deploy Worker
 - deploy Pages proxy
@@ -51,7 +52,7 @@ Os workflows precisam rodar, nessa ordem:
 O comando local obrigatório antes de promover é:
 
 ```powershell
-npm run quality
+pnpm run quality
 ```
 
 ## Estado Atual
@@ -62,6 +63,7 @@ Estabelecido:
 - `src/services/api.ts` funciona como fachada pública; HTTP, polling, uploads e push ficam em módulos dedicados.
 - `FeedbackProvider` centraliza confirmações, toasts e mensagens de erro.
 - Regras financeiras puras ficam em `src/lib/finance.ts` e têm teste unitário.
+- Política de mídia financeira fica em `worker/security.ts` e tem teste unitário.
 - Telefone brasileiro tem normalização/formatação testada.
 - Dev e produção têm branches, bancos e buckets separados.
 
@@ -75,9 +77,9 @@ Pontos de evolução:
 ## Plano de Testes Recomendado
 
 - Unitário: formatação/normalização, cálculo de caixa, filtro por mês, rateio por família.
-- Integração Worker: auth mockada, permissões admin/usuário, pagamentos, despesas, upload de mídia e backup.
+- Integração Worker: auth mockada, permissões admin/usuário, pagamentos, despesas, upload de mídia e backup, preferencialmente com `@cloudflare/vitest-pool-workers`.
 - Importação de dados: fixtures com usuários, família, comprovante ausente, mídia inválida e pagamentos duplicados.
-- E2E: home, mural, comentários, curtidas, comprovante, transparência, perfil, comunidade e painel admin.
+- E2E: login, mural, comprovante próprio, transparência sem mídia privada, painel admin e upload de recibo.
 - Smoke pós-deploy: `/api/health`, assets, D1 bindings e Pages proxy por Service Binding.
 
 ## Backlog Técnico Priorizado

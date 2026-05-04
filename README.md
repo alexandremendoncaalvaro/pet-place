@@ -69,24 +69,38 @@ A política de mídia fica em [docs/MEDIA_POLICY.md](docs/MEDIA_POLICY.md). Imag
 
 ## Rodando localmente
 
+Para rodar a aplicação completa pelo Worker local:
+
 ```powershell
-npm ci
-npm run dev
+pnpm install
+cp .dev.vars.example .dev.vars
+pnpm run build
+pnpm run dev:worker
+```
+
+O Worker local lê apenas `.dev.vars`. Para login Google e Web Push locais,
+preencha esse arquivo com as chaves correspondentes. O `.env` fica reservado
+para variáveis `VITE_*` do frontend.
+
+Para desenvolvimento visual sem API local:
+
+```powershell
+pnpm run dev
 ```
 
 Para validar antes de promover:
 
 ```powershell
-npm run quality
+pnpm run quality
 ```
 
-O comando roda typecheck, testes unitários e build de produção.
+O comando roda scanner de secrets, typecheck, testes unitários/guardrails e build de produção.
 
 Testes E2E funcionais:
 
 ```powershell
-npm run test:e2e
-npm run test:e2e:tutorial
+pnpm run test:e2e
+pnpm run test:e2e:tutorial
 ```
 
 Detalhes em [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
@@ -100,20 +114,20 @@ O deploy é automatizado por GitHub Actions:
 - release candidates usam tags `vX.Y.Z-rc.N`;
 - releases finais usam tags `vX.Y.Z`.
 
-Detalhes em [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) e [DEPLOYMENT.md](DEPLOYMENT.md).
+Detalhes em [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) e [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Segurança
 
 - Secret Scanning e push protection ficam habilitados no GitHub.
-- Dependabot monitora dependências npm e GitHub Actions.
-- `npm run security:secrets` bloqueia secrets hard-coded na árvore atual do repo.
+- Dependabot monitora dependências pnpm e GitHub Actions.
+- `pnpm run security:secrets` bloqueia secrets hard-coded na árvore atual do repo.
 - Credenciais reais devem ficar apenas nos ambientes Cloudflare ou GitHub Actions.
 
 Detalhes em [SECURITY.md](SECURITY.md).
 
 ## Padrões de Engenharia
 
-Os padrões de arquitetura, testes, qualidade e operação ficam em [docs/ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md).
+Os padrões de arquitetura, testes, qualidade e operação ficam em [docs/README.md](docs/README.md).
 
 Resumo:
 
@@ -123,4 +137,4 @@ Resumo:
 - Componentes não devem conter regra financeira complexa.
 - Fluxos sensíveis usam confirmação padronizada.
 - Toasts substituem `alert()` nativo.
-- Mudanças relevantes precisam passar por `npm run quality`.
+- Mudanças relevantes precisam passar por `pnpm run quality`.

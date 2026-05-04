@@ -16,7 +16,7 @@ Esse desenho mantém a API atrás dos domínios oficiais do app e reduz risco op
 
 ## Fluxo de CI/CD
 
-- Pull requests e branches de trabalho rodam `npm ci`, typecheck, testes e build.
+- Pull requests e branches de trabalho rodam `pnpm install --frozen-lockfile`, typecheck, testes e build.
 - Push em `development` publica dev:
   - aplica migrations no D1 dev;
   - publica o Worker `pet-place-dev`;
@@ -43,11 +43,24 @@ Os secrets da aplicação continuam na Cloudflare por ambiente, não no GitHub:
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
 
+`APP_URL` e `VAPID_SUBJECT` são vars plain-text no `wrangler.toml`. Para um
+banco novo, `BOOTSTRAP_ADMIN_EMAIL` pode ser usado localmente em `.dev.vars` ou
+configurado no ambiente Cloudflare enquanto o primeiro admin ainda não existe.
+
+## Ambiente local
+
+- `.env` é apenas para variáveis `VITE_*` lidas pelo Vite.
+- `.dev.vars` é o arquivo do Worker local usado por `pnpm run dev:worker`.
+- `CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_API_TOKEN` devem vir do shell, do `mise`
+  local ou dos GitHub Actions secrets, não do `.env` do app.
+
 ## OAuth Google
 
 Os redirects autorizados precisam incluir:
 
 - `https://pet-place.pages.dev/api/auth/google/callback`
 - `https://pet-place-dev.pages.dev/api/auth/google/callback`
+- `http://localhost:8787/api/auth/google/callback` para OAuth local via
+  `pnpm run dev:worker`
 
 O caminho normal dos usuários deve ser sempre via Pages.
