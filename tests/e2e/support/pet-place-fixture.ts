@@ -1,13 +1,14 @@
 import { expect, Locator, Page, Request, Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, UserProfile } from '../../../src/lib/types';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, SupporterSubscription, UserProfile } from '../../../src/lib/types';
 
 export interface PetPlaceE2EState {
   user: UserProfile | null;
   users: UserProfile[];
   pets: Pet[];
   payments: Payment[];
+  supporters: SupporterSubscription[];
   expenses: Expense[];
   config: AppConfig;
   events: AppEvent[];
@@ -94,6 +95,12 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
       { id: 'payment-admin-may', familyId: 'family-admin', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.adminName, userDog: names.adminPet },
       { id: 'payment-resident-may', familyId: 'family-resident', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.residentName, userDog: names.residentPet },
       { id: 'payment-linked-pending', familyId: 'family-linked', month: currentMonth, amount: 25, proofUrl: '', status: 'pending', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.linkedName, userDog: names.linkedPet },
+    ],
+    supporters: [
+      { familyId: 'family-admin', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'family-resident', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'family-linked', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'offline-tutor-cinza', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
     ],
     expenses: [
       { id: 'expense-terreno', date: '2026-05-02', title: 'Manutencao do terreno', category: 'Geral', amount: 150, receiptUrl: '/e2e/proof.svg', createdBy: 'user-admin', createdAt: now },
@@ -209,7 +216,25 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
     state.user = null;
     return empty(route);
   }
-  if (method === 'POST' && path === '/payments/ensure-current-month') return empty(route);
+  if (method === 'POST' && path === '/payments/ensure-current-month') {
+    const body = safeJson(request.postData() || '{}', {}) as { familyId?: string };
+    const familyId = body.familyId || (state.user?.familyId || state.user?.uid || '');
+    const supporter = state.supporters.find((item) => item.familyId === familyId);
+    if (supporter?.status === 'active' && !state.payments.some((payment) => payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade')) {
+      state.payments.unshift({
+        id: `payment-${state.payments.length + 1}`,
+        familyId,
+        month: currentMonth,
+        amount: state.config.monthlyAmount,
+        proofUrl: '',
+        status: 'pending',
+        type: 'mensalidade',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return empty(route);
+  }
 
   if (method === 'GET' && path === '/config') return json(route, { config: state.config });
   if (method === 'GET' && path === '/events') return json(route, { events: state.events });
@@ -217,6 +242,11 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
   if (method === 'GET' && path === '/expenses') return json(route, { expenses: state.expenses });
   if (method === 'GET' && path === '/public-profiles') return json(route, { profiles: state.users.filter((user) => user.userStatus !== 'blocked') });
   if (method === 'GET' && path === '/users') return json(route, { users: state.users });
+  if (method === 'GET' && path === '/supporters') {
+    if (url.searchParams.get('all') === '1') return json(route, { supporters: state.supporters });
+    const familyId = url.searchParams.get('familyId') || state.user?.familyId || state.user?.uid || '';
+    return json(route, { supporter: state.supporters.find((item) => item.familyId === familyId) || { familyId, status: 'paused', source: 'self', createdAt: '', updatedAt: '' } });
+  }
   if (method === 'GET' && path === '/identity-link-suggestions') return json(route, { suggestions: state.identityLinkSuggestions });
   if (method === 'GET' && path === '/pets') {
     const ownerId = url.searchParams.get('ownerId');
@@ -321,6 +351,42 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
     };
     state.users.push(offlineUser);
     return json(route, { user: offlineUser });
+  }
+
+  const supporterPatchMatch = path.match(/^\/supporters\/([^/]+)$/);
+  if (method === 'PATCH' && supporterPatchMatch) {
+    const familyId = decodeURIComponent(supporterPatchMatch[1]);
+    const body = safeJson(request.postData() || '{}', {}) as { status?: SupporterSubscription['status']; cancelCurrentPending?: boolean };
+    const existing = state.supporters.find((item) => item.familyId === familyId);
+    const supporter: SupporterSubscription = {
+      familyId,
+      status: body.status || 'paused',
+      activeSinceMonth: body.status === 'active' ? currentMonth : existing?.activeSinceMonth,
+      pausedAt: body.status === 'paused' ? now : undefined,
+      source: state.user?.role === 'admin' ? 'admin' : 'self',
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    state.supporters = existing
+      ? state.supporters.map((item) => item.familyId === familyId ? supporter : item)
+      : [...state.supporters, supporter];
+    if (body.status === 'paused' && body.cancelCurrentPending) {
+      state.payments = state.payments.filter((payment) => !(payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade' && (payment.status === 'pending' || payment.status === 'rejected')));
+    }
+    if (body.status === 'active' && !state.payments.some((payment) => payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade')) {
+      state.payments.unshift({
+        id: `payment-${state.payments.length + 1}`,
+        familyId,
+        month: currentMonth,
+        amount: state.config.monthlyAmount,
+        proofUrl: '',
+        status: 'pending',
+        type: 'mensalidade',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return json(route, { supporter });
   }
 
   if (method === 'POST' && path === '/payments/manual') {

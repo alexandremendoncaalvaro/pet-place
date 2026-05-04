@@ -1,4 +1,4 @@
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, SupporterSubscription, UserProfile } from '../lib/types';
 import { API_BASE, api, toApiError } from './http';
 import { notifyDataChanged, subscribe } from './subscriptions';
 import { classifyUploadMedia, compressImage, createVideoPoster, normalizeUploadFile } from './uploads';
@@ -56,6 +56,14 @@ export function subscribeToMyPayments(familyId: string, callback: (payments: Pay
 
 export function subscribeToAllPayments(callback: (payments: Payment[]) => void) {
   return subscribe(async () => (await api<{ payments: Payment[] }>('/payments?all=1')).payments, callback, 120000, ['payments']);
+}
+
+export function subscribeToMySupporter(familyId: string, callback: (supporter: SupporterSubscription | null) => void) {
+  return subscribe(async () => (await api<{ supporter: SupporterSubscription }>(`/supporters?familyId=${encodeURIComponent(familyId)}`)).supporter, callback, 120000, ['supporters']);
+}
+
+export function subscribeToAllSupporters(callback: (supporters: SupporterSubscription[]) => void) {
+  return subscribe(async () => (await api<{ supporters: SupporterSubscription[] }>('/supporters?all=1')).supporters, callback, 120000, ['supporters']);
 }
 
 export function subscribeToAllExpenses(callback: (expenses: Expense[]) => void) {
@@ -148,6 +156,15 @@ async function updatePaymentStatus(paymentId: string, status: PaymentStatus) {
 
 export async function deletePayment(paymentId: string) {
   await api(`/payments/${encodeURIComponent(paymentId)}`, { method: 'DELETE' });
+  notifyDataChanged('payments');
+}
+
+export async function updateSupporterStatus(familyId: string, status: SupporterSubscription['status'], options: { cancelCurrentPending?: boolean } = {}) {
+  await api(`/supporters/${encodeURIComponent(familyId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, cancelCurrentPending: !!options.cancelCurrentPending }),
+  });
+  notifyDataChanged('supporters');
   notifyDataChanged('payments');
 }
 

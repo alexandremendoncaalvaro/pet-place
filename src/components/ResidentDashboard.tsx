@@ -1,22 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Camera, CheckCircle2, Copy, AlertTriangle, Clock, Loader2, ImagePlus, X, Heart } from 'lucide-react';
+import { Camera, CheckCircle2, Copy, AlertTriangle, Clock, Loader2, ImagePlus, X, Heart, Receipt } from 'lucide-react';
 import { uploadProofAndSubmit } from '../services/api';
 import { PostItem } from './PostItem';
 import { NovaDoacaoModal } from './NovaDoacaoModal';
 import { useFeedback } from './Feedback';
 import { Badge, Button, Card, EmptyState, IconButton, ModalSurface, SectionTitle } from './ui';
+import { isSupporterActiveForMonth } from '../lib/supporters';
 
-export function ResidentDashboard() {
-  const { user, myPayments, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
+export function ResidentDashboard({ onBecomeSupporter, onOpenTransparency }: { onBecomeSupporter?: () => void; onOpenTransparency?: () => void }) {
+  const { user, myPayments, mySupporter, allExpenses, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
   const { toast } = useFeedback();
   const currentMonth = format(new Date(), 'yyyy-MM');
   const currentPayment = myPayments.find(p => p.month === currentMonth);
+  const isSupporterActive = isSupporterActiveForMonth(mySupporter, currentMonth);
   const [copied, setCopied] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inviteStorageKey = `petplace_supporter_invite_dismissed_until:${user?.uid || 'anon'}`;
+  const [inviteDismissedUntil, setInviteDismissedUntil] = useState(0);
 
   // Modal State
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
@@ -24,6 +28,21 @@ export function ResidentDashboard() {
 
   const monthLabel = format(parseISO(`${currentMonth}-01`), 'MMMM', { locale: ptBR });
   const pixKeyToUse = appConfig?.pixKey || "Não configurada";
+  const monthlyExpenses = useMemo(
+    () => allExpenses.filter((expense) => expense.date.startsWith(currentMonth)).reduce((total, expense) => total + expense.amount, 0),
+    [allExpenses, currentMonth],
+  );
+  const inviteDismissed = inviteDismissedUntil > Date.now();
+
+  useEffect(() => {
+    setInviteDismissedUntil(Number(localStorage.getItem(inviteStorageKey) || 0));
+  }, [inviteStorageKey]);
+
+  const handleDismissInvite = () => {
+    const until = Date.now() + 24 * 60 * 60 * 1000;
+    localStorage.setItem(inviteStorageKey, String(until));
+    setInviteDismissedUntil(until);
+  };
 
   const handleCopyPix = () => {
     navigator.clipboard.writeText(pixKeyToUse);
@@ -48,19 +67,29 @@ export function ResidentDashboard() {
   if (!currentPayment) {
     return (
       <div className="pb-24">
-        <Card tone="muted" className="m-4 p-5">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-full bg-warning-100 text-warning-600">
-              <AlertTriangle size={18} />
+        {isSupporterActive ? (
+          <Card tone="muted" className="m-4 p-5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-warning-100 text-warning-600">
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-ink-900">Mensalidade de {monthLabel}</h2>
+                <p className="text-xs text-ink-500 mt-1">
+                  Ainda não existe cobrança para este mês. Se a página acabou de abrir, aguarde alguns segundos ou recarregue.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-semibold text-ink-900">Mensalidade de {monthLabel}</h2>
-              <p className="text-xs text-ink-500 mt-1">
-                Ainda não existe cobrança para este mês. Se a página acabou de abrir, aguarde alguns segundos ou recarregue.
-              </p>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        ) : !inviteDismissed && (
+          <SupporterInviteCard
+            className="m-4"
+            monthlyExpenses={monthlyExpenses}
+            onBecomeSupporter={onBecomeSupporter}
+            onOpenTransparency={onOpenTransparency}
+            onDismiss={handleDismissInvite}
+          />
+        )}
 
         <div className="px-4 space-y-6">
           {posts.length === 0 ? (
@@ -69,7 +98,20 @@ export function ResidentDashboard() {
               <p>Nenhuma foto ainda. Seja o primeiro a postar!</p>
             </EmptyState>
           ) : (
-            posts.map(post => <PostItem key={post.id} post={post} />)
+            posts.map((post, index) => (
+              <React.Fragment key={post.id}>
+                <PostItem post={post} />
+                {!isSupporterActive && !inviteDismissed && index === 1 && (
+                  <SupporterInviteCard
+                    compact
+                    monthlyExpenses={monthlyExpenses}
+                    onBecomeSupporter={onBecomeSupporter}
+                    onOpenTransparency={onOpenTransparency}
+                    onDismiss={handleDismissInvite}
+                  />
+                )}
+              </React.Fragment>
+            ))
           )}
         </div>
       </div>
@@ -137,8 +179,19 @@ export function ResidentDashboard() {
         
         {/* Posts List */}
         <div className="space-y-6">
-          {posts.map(post => (
-            <PostItem key={post.id} post={post} />
+          {posts.map((post, index) => (
+            <React.Fragment key={post.id}>
+              <PostItem post={post} />
+              {!isSupporterActive && !inviteDismissed && index === 1 && (
+                <SupporterInviteCard
+                  compact
+                  monthlyExpenses={monthlyExpenses}
+                  onBecomeSupporter={onBecomeSupporter}
+                  onOpenTransparency={onOpenTransparency}
+                  onDismiss={handleDismissInvite}
+                />
+              )}
+            </React.Fragment>
           ))}
           {posts.length === 0 && (
             <EmptyState>
@@ -248,5 +301,50 @@ export function ResidentDashboard() {
 
       {showDonationModal && <NovaDoacaoModal onClose={() => setShowDonationModal(false)} />}
     </div>
+  );
+}
+
+function SupporterInviteCard({
+  monthlyExpenses,
+  onBecomeSupporter,
+  onOpenTransparency,
+  onDismiss,
+  compact = false,
+  className = '',
+}: {
+  monthlyExpenses: number;
+  onBecomeSupporter?: () => void;
+  onOpenTransparency?: () => void;
+  onDismiss: () => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  const expenseCopy = monthlyExpenses > 0
+    ? `Este mês já tivemos R$ ${monthlyExpenses.toFixed(2)} em cuidados do espaço.`
+    : 'Todo mês a comunidade cuida de limpeza, manutenção e melhorias do espaço.';
+
+  return (
+    <Card tone="brand" className={`relative overflow-hidden p-5 shadow-none ${className}`}>
+      <IconButton onClick={onDismiss} aria-label="Ocultar convite por 24 horas" className="absolute right-3 top-3 h-8 w-8 bg-white/70 text-ink-400">
+        <X size={16} />
+      </IconButton>
+      <div className="flex items-start gap-3 pr-8">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-brand-600 shadow-sm">
+          {compact ? <Receipt size={18} /> : <Heart size={18} className="fill-brand-100" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink-900">{compact ? 'Ajude a manter o PetPlace' : 'Seja um apoiador recorrente'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-600">{expenseCopy}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={onBecomeSupporter} size="sm" className="rounded-full">
+              Virar apoiador
+            </Button>
+            <Button onClick={onOpenTransparency} variant="ghost" size="sm" className="rounded-full bg-white/70 text-brand-700">
+              Ver extrato
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
