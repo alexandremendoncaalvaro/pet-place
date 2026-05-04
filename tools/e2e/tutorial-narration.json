@@ -1,0 +1,84 @@
+[
+  {
+    "id": "01-post-com-imagem",
+    "title": "Post com imagem",
+    "segments": [
+      {
+        "text": "Tutor Azul chegou ao Pet Place e quer compartilhar um registro do encontro com a comunidade.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "Ao digitar arroba e parte do nome, o app mostra sugestoes de pessoas e pets.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "A pessoa marcada entra no texto do post, como em uma rede social.",
+        "pauseMs": 900
+      },
+      {
+        "text": "A imagem ficticia aparece em previa antes da publicacao.",
+        "pauseMs": 900
+      },
+      {
+        "text": "Depois de postar, a imagem e a marcacao ficam visiveis no feed.",
+        "pauseMs": 900
+      },
+      {
+        "text": "A conversa continua nos comentarios do proprio post.",
+        "pauseMs": 900
+      }
+    ]
+  },
+  {
+    "id": "02-post-com-video",
+    "title": "Post com video",
+    "segments": [
+      {
+        "text": "Agora o tutorial mostra um video curto, gravado em um contexto ficticio do Pet Place.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "Digitando arroba e parte do nome do pet, a sugestao aparece no editor.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "Selecionar o pet cria uma marcacao que pode notificar a familia vinculada.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "O MP4 curto entra como previa antes da publicacao.",
+        "pauseMs": 900
+      },
+      {
+        "text": "No feed, o video publicado aparece junto com a tag do pet.",
+        "pauseMs": 900
+      }
+    ]
+  },
+  {
+    "id": "03-pagamento-e-transparencia",
+    "title": "Pagamento externo e transparencia",
+    "segments": [
+      {
+        "text": "Quando alguem paga fora do app, o administrador registra tudo sem obrigar essa pessoa a entrar.",
+        "pauseMs": 1200
+      },
+      {
+        "text": "O formulario cria uma pessoa offline com telefone e pet ficticios.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "A competencia, o valor e o comprovante ficam associados ao caixa.",
+        "pauseMs": 1000
+      },
+      {
+        "text": "Ao registrar, o pagamento entra aprovado e documentado.",
+        "pauseMs": 900
+      },
+      {
+        "text": "No extrato, a comunidade confere entradas e saidas no mesmo periodo.",
+        "pauseMs": 1000
+      }
+    ]
+  }
+]

@@ -241,18 +241,19 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
           <div className="flex items-center gap-4">
             <button 
               onClick={() => togglePostLike(post.id, user!.uid, isLiked)}
+              aria-label={isLiked ? 'Remover curtida' : 'Curtir publicação'}
               className="flex items-center gap-1 text-ink-500 active:scale-90 transition-transform"
             >
               <Heart size={22} className={isLiked ? "fill-danger-600 text-danger-600" : ""} />
               <span className="text-sm font-medium">{post.likedBy?.length || 0}</span>
             </button>
-            <button onClick={() => setShowComments(!showComments)} className="text-ink-500 flex items-center gap-1 active:scale-95 transition-transform">
+            <button onClick={() => setShowComments(!showComments)} aria-label="Comentários da publicação" className="text-ink-500 flex items-center gap-1 active:scale-95 transition-transform">
               <MessageCircle size={22} className={showComments ? "text-brand-500" : ""} />
               <span className="text-sm font-medium">{visibleCommentCount > 0 ? visibleCommentCount : ''}</span>
             </button>
           </div>
           {(post.likedBy?.length || 0) > 0 && (
-            <button onClick={() => setShowLikes(!showLikes)} className="text-ink-400 hover:text-ink-600 transition-colors">
+            <button onClick={() => setShowLikes(!showLikes)} aria-label="Ver curtidas" className="text-ink-400 hover:text-ink-600 transition-colors">
               <Eye size={20} className={showLikes ? "text-brand-500" : ""} />
             </button>
           )}
@@ -398,7 +399,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
                 placeholder="Adicionar um comentário..."
                 className="flex-1 text-sm rounded-full pl-4 pr-10 py-2"
               />
-              <button disabled={!newComment.trim()} type="submit" className="absolute right-2 top-2 text-brand-500 disabled:text-ink-300">
+              <button disabled={!newComment.trim()} type="submit" aria-label="Enviar comentário" className="absolute right-2 top-2 text-brand-500 disabled:text-ink-300">
                 <Send size={18} />
               </button>
             </form>

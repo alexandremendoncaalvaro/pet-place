@@ -7,6 +7,8 @@ coverage/
 .env*
 !.env.example
 .dev.vars
+.mise.local.toml
+mise.local.toml
 .wrangler/
 .venv/
 __pycache__/
@@ -14,3 +16,8 @@ __pycache__/
 tools/migrate/.venv/
 .migration/
 migration-export/
+playwright-report/
+test-results/
+docs/tutorials/generated/
+tools/e2e/tts/piper/*.onnx
+tools/e2e/tts/piper/*.onnx.json

@@ -2,15 +2,16 @@
   "name": "pet-place",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.32.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "wrangler dev --env dev --local --env-file .dev.vars",
     "build": "vite build",
-    "deploy": "npm run deploy:prod",
-    "deploy:prod": "npm run build && wrangler deploy --env production && npm run pages:prod",
-    "deploy:dev": "npm run build && wrangler deploy --env dev && npm run pages:dev",
-    "cf:migrate": "npm run cf:migrate:prod",
+    "deploy": "pnpm run deploy:prod",
+    "deploy:prod": "pnpm run build && wrangler deploy --env production && pnpm run pages:prod",
+    "deploy:dev": "pnpm run build && wrangler deploy --env dev && pnpm run pages:dev",
+    "cf:migrate": "pnpm run cf:migrate:prod",
     "cf:migrate:prod": "wrangler d1 migrations apply DB --env production --remote",
     "cf:migrate:dev": "wrangler d1 migrations apply DB --env dev --remote",
     "pages:prod": "wrangler pages deploy pages-proxy --project-name pet-place --branch main",
@@ -20,7 +21,11 @@
     "security:secrets": "node tools/security/scan-secrets.mjs",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "quality": "npm run security:secrets && npm run lint && npm test && npm run build",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:tutorial": "cross-env PLAYWRIGHT_VIDEO=on playwright test --project=tutorial-chromium && node tools/e2e/collect-tutorial-videos.mjs",
+    "tutorial:narrate": "node tools/e2e/render-narrated-tutorials.mjs",
+    "quality": "pnpm run security:secrets && pnpm run lint && pnpm test && pnpm run test:e2e && pnpm run build",
     "smoke:dev": "node tools/smoke.mjs https://pet-place-dev.pages.dev",
     "smoke:prod": "node tools/smoke.mjs https://pet-place.pages.dev"
   },
@@ -40,9 +45,11 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260503.1",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.14.0",
     "@types/textarea-caret": "^3.0.4",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^10.1.0",
     "eslint": "^10.3.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
@@ -50,5 +57,12 @@
     "vite": "^8.0.10",
     "vitest": "^4.1.5",
     "wrangler": "^4.87.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
   }
 }

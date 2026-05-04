@@ -105,6 +105,32 @@ describe('project architecture guardrails', () => {
     expect(duplicateCleanup).toBeLessThan(movePayments);
   });
 
+  it('keeps financial writes behind positive amount validation', () => {
+    const worker = read('worker/index.ts');
+
+    expect(worker).toContain('function positiveAmount');
+    expect(worker).toContain('const amount = positiveAmount(form.get(\'amount\'));');
+    expect(worker).toContain('const amount = positiveAmount(charge.amount);');
+    expect(worker).toContain('const amount = positiveAmount(data.amount);');
+  });
+
+  it('keeps financial media private while preserving the authenticated transparency ledger', () => {
+    const worker = read('worker/index.ts');
+    const mediaPolicy = read('worker/security.ts');
+
+    expect(worker).toContain('resolveMediaAccessReference');
+    expect(worker).toContain('canAccessMediaReference(user, accessReference)');
+    expect(worker).toContain('SELECT family_id FROM payments WHERE proof_key = ? LIMIT 1');
+    expect(worker).toContain('SELECT id FROM expenses WHERE receipt_key = ? LIMIT 1');
+    expect(worker).toContain('SELECT id FROM users WHERE photo_key = ? LIMIT 1');
+    expect(worker).toContain('SELECT id FROM posts WHERE media_key = ? LIMIT 1');
+    expect(worker).toContain("includeProofs: user.role === 'admin'");
+    expect(worker).toContain("includeReceipts: user.role === 'admin'");
+    expect(mediaPolicy).toContain("reference.kind === 'payment-proof'");
+    expect(mediaPolicy).toContain("reference.kind === 'expense-receipt'");
+    expect(mediaPolicy).toContain("reference.kind === 'unknown'");
+  });
+
   it('serves videos with range support and explicit posters', () => {
     const worker = read('worker/index.ts');
     const api = read('src/services/api.ts');
@@ -129,7 +155,7 @@ describe('project architecture guardrails', () => {
     expect(uploads).toContain("'video/quicktime'");
     expect(uploads).toContain('MEDIA_EVENT_TIMEOUT_MS');
     expect(uploads).toContain('Video metadata validation skipped');
-    expect(createPostModal).toContain('accept="image/*,video/*,.mp4"');
+    expect(createPostModal).toContain('accept="image/*,video/*,.mp4,.mov,.m4v"');
     expect(createPostModal).toContain('htmlFor="post-media-input"');
     expect(createPostModal).toContain('controls');
     expect(createPostModal).toContain('poster={postVideoPosterUrl || undefined}');
@@ -164,11 +190,27 @@ describe('project architecture guardrails', () => {
     const readme = read('README.md');
 
     expect(existsSync(join(root, 'assets/pet-place.jpeg'))).toBe(true);
+    expect(existsSync(join(root, 'docs/README.md'))).toBe(true);
+    expect(existsSync(join(root, 'docs/ARCHITECTURE.md'))).toBe(true);
+    expect(existsSync(join(root, 'docs/DEPLOYMENT.md'))).toBe(true);
     expect(existsSync(join(root, 'docs/DESIGN_SYSTEM.md'))).toBe(true);
     expect(existsSync(join(root, 'docs/MEDIA_POLICY.md'))).toBe(true);
     expect(readme).toContain('assets/pet-place.jpeg');
+    expect(readme).toContain('docs/README.md');
     expect(readme).toContain('docs/DESIGN_SYSTEM.md');
     expect(readme).toContain('docs/MEDIA_POLICY.md');
+    expect(readme).toContain('docs/DEPLOYMENT.md');
     expect(readme).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+
+  it('keeps pnpm as the Node package manager', () => {
+    const packageJson = JSON.parse(read('package.json')) as { packageManager?: string };
+    const ci = read('.github/workflows/ci.yml');
+
+    expect(packageJson.packageManager).toMatch(/^pnpm@/);
+    expect(existsSync(join(root, 'pnpm-lock.yaml'))).toBe(true);
+    expect(existsSync(join(root, 'package-lock.json'))).toBe(false);
+    expect(ci).toContain('pnpm install --frozen-lockfile');
+    expect(ci).toContain('cache: pnpm');
   });
 });

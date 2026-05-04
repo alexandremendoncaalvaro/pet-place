@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar, ChevronDown } from 'lucide-react';
@@ -426,7 +426,7 @@ function ManualPaymentForm({ allUsers }: { allUsers: UserProfile[] }) {
           <Button type="button" onClick={() => fileRef.current?.click()} variant="ghost" className="w-full bg-white text-brand-600">
             <Receipt size={18} className="mr-2" /> {file ? file.name : 'Anexar comprovante'}
           </Button>
-          <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          <input ref={fileRef} data-testid="manual-payment-proof-input" type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
 
           <Button disabled={loading} type="submit" className="w-full">
             {loading ? <Loader2 size={18} className="animate-spin" /> : <><Plus size={18} className="mr-2" /> Registrar no caixa</>}
