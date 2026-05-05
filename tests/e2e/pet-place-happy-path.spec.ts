@@ -49,6 +49,7 @@ test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
   await page.getByText('Comunidade').click();
   await page.getByPlaceholder('Buscar...').fill('Tutor Laranja');
   await expect(page.getByText('Tutor Laranja')).toBeVisible();
+  await expect(page.getByText('Apoiador').first()).toBeVisible();
   await page.getByPlaceholder('Buscar...').fill('Pet Lua');
   await expect(page.getByText('Pet Lua')).toBeVisible();
   await expectImageLoaded(page.getByAltText('Pet Lua').first());
@@ -89,7 +90,19 @@ test('09 - comentario aparece na thread da publicacao', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Comentários da publicação' }).first()).toContainText('3');
 });
 
-test('10 - admin registra pagamento externo com comprovante', async ({ page }) => {
+test('10 - comentario aceita mencao com arroba e notifica tutor do pet', async ({ page }) => {
+  await page.getByRole('button', { name: 'Comentários da publicação' }).first().click();
+  await page.getByPlaceholder(/Adicionar um coment/).fill('Oi @Pet');
+  const petSuggestion = page.getByRole('button').filter({ hasText: 'Pet Lua' }).filter({ hasText: 'Pet de Tutor Laranja' });
+  await expect(petSuggestion).toBeVisible();
+  await petSuggestion.click();
+  await page.getByPlaceholder(/Adicionar um coment/).fill('Oi @Pet Lua no comentário');
+  await page.getByRole('button', { name: /Enviar comentario|Enviar comentário/ }).click();
+  await expect(page.getByText('Oi @Pet Lua no comentário')).toBeVisible();
+  expect(state.notifications.some((notification) => notification.userId === 'user-linked' && notification.type === 'mention')).toBe(true);
+});
+
+test('11 - admin registra pagamento externo com comprovante', async ({ page }) => {
   await page.getByRole('button', { name: 'Admin' }).click();
   await page.getByRole('button', { name: /Pessoas/ }).click();
   await page.getByRole('button', { name: /Pagamento externo/ }).click();
@@ -108,7 +121,7 @@ test('10 - admin registra pagamento externo com comprovante', async ({ page }) =
   expect(state.payments.some((payment) => payment.familyId.startsWith('offline-') && payment.amount === 25)).toBe(true);
 });
 
-test('11 - nova familia nao apoiadora ve convite e nao recebe mensalidade automatica', async ({ page }) => {
+test('12 - nova familia nao apoiadora ve convite e nao recebe mensalidade automatica', async ({ page }) => {
   state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
   state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
   state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
@@ -118,7 +131,7 @@ test('11 - nova familia nao apoiadora ve convite e nao recebe mensalidade automa
   expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade')).toBe(false);
 });
 
-test('12 - perfil permite virar apoiador recorrente e cria mensalidade', async ({ page }) => {
+test('13 - perfil permite virar apoiador recorrente e cria mensalidade', async ({ page }) => {
   state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
   state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
   state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
@@ -130,7 +143,7 @@ test('12 - perfil permite virar apoiador recorrente e cria mensalidade', async (
   expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade' && payment.status === 'pending')).toBe(true);
 });
 
-test('13 - pausar apoio pode cancelar mensalidade pendente do mes', async ({ page }) => {
+test('14 - pausar apoio pode cancelar mensalidade pendente do mes', async ({ page }) => {
   state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
   state.payments = state.payments.map((payment) => payment.id === 'payment-resident-may' ? { ...payment, status: 'pending', proofUrl: '' } : payment);
   await page.reload();

@@ -304,10 +304,10 @@ export function subscribeToComments(postId: string, callback: (comments: PostCom
   return subscribe(async () => (await api<{ comments: PostComment[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 120000, [`comments:${postId}`]);
 }
 
-export async function addComment(postId: string, authorId: string, content: string) {
+export async function addComment(postId: string, authorId: string, content: string, tags: string[] = []) {
   await api(`/posts/${encodeURIComponent(postId)}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ authorId, content }),
+    body: JSON.stringify({ authorId, content, tags }),
   });
   notifyDataChanged(`comments:${postId}`);
   notifyDataChanged('posts');

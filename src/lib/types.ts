@@ -101,6 +101,7 @@ export interface PostComment {
   postId: string;
   authorId: string;
   content: string;
+  tags?: string[];
   createdAt: string;
 }
 

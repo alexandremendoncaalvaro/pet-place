@@ -144,6 +144,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       subscribeToAllEvents(setEvents),
       subscribeToMyPayments(familyId, setMyPayments),
       subscribeToMySupporter(familyId, setMySupporter),
+      subscribeToAllSupporters(setAllSupporters),
       subscribeToMyNotifications(user.uid, user.role, setMyNotifications),
       subscribeToAllExpenses(setAllExpenses),
       subscribeToAllPublicProfiles(setPublicProfiles),
@@ -153,7 +154,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (user.role === 'admin') {
       unsubs.push(subscribeToAllUsers(setAllUsers));
-      unsubs.push(subscribeToAllSupporters(setAllSupporters));
       unsubs.push(subscribeToIdentityLinkSuggestions(setIdentityLinkSuggestions));
     }
 

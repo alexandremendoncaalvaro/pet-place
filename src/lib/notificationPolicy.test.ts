@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentNotification, likeNotification } from './notificationPolicy';
+import { commentNotification, likeNotification, mentionNotification, paymentStatusNotification } from './notificationPolicy';
 
 describe('notification policy', () => {
   it('creates direct comment notifications with a concise actor name', () => {
@@ -24,5 +24,18 @@ describe('notification policy', () => {
       title: 'Curtidas na sua publicação',
       message: '4 pessoas curtiram sua publicação.',
     });
+  });
+
+  it('separates mention copy for comments from regular comments', () => {
+    expect(mentionNotification({ actorName: 'Tutor Verde', context: 'comment' })).toEqual({
+      type: 'mention',
+      title: 'Nova menção',
+      message: 'Tutor marcou você ou seu pet em um comentário.',
+    });
+  });
+
+  it('notifies families when payment proof is approved or rejected', () => {
+    expect(paymentStatusNotification('approved').title).toBe('Pagamento aprovado');
+    expect(paymentStatusNotification('rejected').title).toBe('Comprovante recusado');
   });
 });

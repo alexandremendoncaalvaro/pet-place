@@ -2,8 +2,8 @@ import React, { useRef, useState } from 'react';
 import getCaretCoordinates from 'textarea-caret';
 import { useApp } from '../context/AppContext';
 import { X, ImagePlus, AtSign, FileVideo } from 'lucide-react';
-import { addPost, addNotification } from '../services/api';
-import { buildMentionEntities, filterMentionEntities, resolveMentionNotificationTargets, MentionEntity } from '../lib/mentions';
+import { addPost } from '../services/api';
+import { buildMentionEntities, filterMentionEntities, MentionEntity } from '../lib/mentions';
 import { classifyUploadMedia, createVideoPoster, getUploadMimeType, normalizeUploadFile, validateVideoForUpload } from '../services/uploads';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
@@ -202,17 +202,6 @@ export function CreatePostModal({ onClose }: CreatePostModalProps) {
         postData.mediaType = classifyUploadMedia(postFile) === 'video' ? 'video' : 'image';
       }
       await addPost(postData, postFile || undefined);
-
-      if (postTags.length > 0) {
-        const targetUids = resolveMentionNotificationTargets(postTags, user!.uid, publicProfiles, allPets);
-        targetUids.forEach(uid => {
-          addNotification({
-            userId: uid,
-            title: 'Nova Menção!',
-            message: `${user!.name} marcou você ou seu pet em uma publicação recente.`,
-          }).catch(e => console.error(e));
-        });
-      }
 
       onClose();
     } catch(e) {

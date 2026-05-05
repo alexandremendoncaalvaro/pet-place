@@ -82,9 +82,10 @@ export function FieldLabel({ className, ...props }: React.LabelHTMLAttributes<HT
   return <label className={cn('mb-2 block text-xs font-semibold uppercase tracking-wide text-ink-500', className)} {...props} />;
 }
 
-export function TextInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function TextInput({ className, ...props }, ref) {
   return (
     <input
+      ref={ref}
       className={cn(
         'w-full rounded-control border border-ink-200 bg-ink-50 px-4 py-3 font-medium text-ink-700 outline-none transition-all placeholder:text-ink-400 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/15',
         className,
@@ -92,7 +93,7 @@ export function TextInput({ className, ...props }: React.InputHTMLAttributes<HTM
       {...props}
     />
   );
-}
+});
 
 export function EmptyState({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('rounded-card border border-dashed border-ink-200 bg-white p-8 text-center text-sm text-ink-500', className)} {...props} />;

@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from 'cloudflare:workers';
-import { commentNotification, likeNotification } from '../src/lib/notificationPolicy';
+import { commentNotification, likeNotification, mentionNotification, paymentStatusNotification } from '../src/lib/notificationPolicy';
 import { getSupporterStartMonth, isSupporterActiveForMonth } from '../src/lib/supporters';
 import { serializeExpense, serializePayment } from './financialRecords';
 import { mediaUrl } from './media';
@@ -238,8 +238,7 @@ async function routeSupportersApi(path: string, method: string, request: Request
   if (path === '/supporters' && method === 'GET') {
     const all = url.searchParams.get('all') === '1';
     if (all) {
-      requireAdmin(user);
-      return json({ supporters: await listSupporterSubscriptions(env) });
+      return json({ supporters: user.role === 'admin' ? await listSupporterSubscriptions(env) : await listPublicSupporterSubscriptions(env) });
     }
     const requestedFamily = url.searchParams.get('familyId') || familyId(user);
     if (requestedFamily !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para esta família.', 403);
@@ -797,6 +796,11 @@ async function listSupporterSubscriptions(env: Env): Promise<SupporterSubscripti
   return (rows.results || []).map((row) => rowToSupporter(row));
 }
 
+async function listPublicSupporterSubscriptions(env: Env): Promise<SupporterSubscription[]> {
+  const rows = await env.DB.prepare("SELECT family_id, status, active_since_month, paused_at, source, created_at, updated_at FROM supporter_subscriptions WHERE status = 'active' ORDER BY updated_at DESC").all<any>();
+  return (rows.results || []).map((row) => rowToSupporter(row));
+}
+
 async function isFamilyActiveSupporter(env: Env, targetFamilyId: string, month: string): Promise<boolean> {
   return isSupporterActiveForMonth(await getSupporterSubscription(env, targetFamilyId), month);
 }
@@ -1017,7 +1021,20 @@ async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, p
 async function updatePaymentStatusRoute(request: Request, env: Env, paymentId: string): Promise<Response> {
   const body = await request.json<{ status: PaymentStatus }>();
   if (!['pending', 'analyzing', 'approved', 'rejected'].includes(body.status)) return bad('Status inválido.', 400);
+  const payment = await env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(paymentId).first<any>();
+  if (!payment) return bad('Pagamento não encontrado.', 404);
   await env.DB.prepare('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?').bind(body.status, now(), paymentId).run();
+  if ((body.status === 'approved' || body.status === 'rejected') && payment.status !== body.status) {
+    const copy = paymentStatusNotification(body.status);
+    const users = await listActiveFamilyUsers(env, payment.family_id);
+    await Promise.all(users.map((target) => insertNotification(env, target.id, copy.title, copy.message, {
+      type: copy.type,
+      entityType: 'payment',
+      entityId: paymentId,
+      aggregationKey: `payment_status:${paymentId}:${body.status}:${target.id}`,
+      data: { paymentId, month: payment.month, status: body.status },
+    })));
+  }
   await publishRealtime(env, 'payments', 'all', { paymentId, status: body.status, action: 'status-updated' });
   return json({ ok: true });
 }
@@ -1220,11 +1237,17 @@ async function listNotifications(env: Env, user: CurrentUser): Promise<any[]> {
   const targets = user.role === 'admin' ? [user.uid, 'all', 'admins'] : [user.uid, 'all'];
   const placeholders = targets.map(() => '?').join(',');
   const res = await env.DB.prepare(`
-    SELECT * FROM notifications
-    WHERE user_id IN (${placeholders})
-    ORDER BY created_at DESC
+    SELECT n.*,
+      CASE
+        WHEN n.user_id IN ('all', 'admins') THEN CASE WHEN nr.user_id IS NULL THEN 0 ELSE 1 END
+        ELSE n.is_read
+      END AS computed_is_read
+    FROM notifications n
+    LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
+    WHERE n.user_id IN (${placeholders})
+    ORDER BY n.created_at DESC
     LIMIT 100
-  `).bind(...targets).all<any>();
+  `).bind(user.uid, ...targets).all<any>();
   return (res.results || []).map(rowToNotification);
 }
 
@@ -1244,7 +1267,7 @@ function rowToNotification(row: any): any {
     userId: row.user_id,
     title: row.title,
     message: row.message,
-    isRead: !!row.is_read,
+    isRead: !!(row.computed_is_read ?? row.is_read),
     createdAt: row.created_at,
     type: row.type || 'generic',
     actorId: row.actor_id || undefined,
@@ -1264,10 +1287,19 @@ async function addNotificationRoute(request: Request, env: Env, user: CurrentUse
 }
 
 async function markNotificationRead(env: Env, user: CurrentUser, id: string): Promise<Response> {
-  await env.DB.prepare(`
-    UPDATE notifications SET is_read = 1
-    WHERE id = ? AND (user_id = ? OR user_id = 'all' OR (user_id = 'admins' AND ? = 'admin'))
-  `).bind(id, user.uid, user.role).run();
+  const notification = await env.DB.prepare('SELECT user_id FROM notifications WHERE id = ?').bind(id).first<any>();
+  if (!notification) return json({ ok: true });
+  if (notification.user_id === user.uid) {
+    await env.DB.prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?').bind(id, user.uid).run();
+  } else if (notification.user_id === 'all' || (notification.user_id === 'admins' && user.role === 'admin')) {
+    await env.DB.prepare(`
+      INSERT INTO notification_reads (notification_id, user_id, read_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(notification_id, user_id) DO UPDATE SET read_at = excluded.read_at
+    `).bind(id, user.uid, now()).run();
+  } else {
+    throw new HttpError('Sem permissão para marcar esta notificação.', 403);
+  }
   await publishRealtime(env, 'notifications', user.uid, { id, action: 'read' });
   return json({ ok: true });
 }
@@ -1352,6 +1384,84 @@ async function countPostLikes(env: Env, postId: string): Promise<number> {
   return Number(row?.count || 0);
 }
 
+async function resolveMentionTargets(env: Env, tagIds: string[], actorUid: string): Promise<string[]> {
+  const uniqueTagIds = normalizeTagIds(tagIds);
+  const targetUids = new Set<string>();
+
+  for (const tagId of uniqueTagIds) {
+    const taggedUser = await env.DB.prepare(`
+      SELECT id
+      FROM users
+      WHERE id = ? AND user_status != 'blocked'
+      LIMIT 1
+    `).bind(tagId).first<any>();
+    if (taggedUser?.id) {
+      targetUids.add(taggedUser.id);
+      continue;
+    }
+
+    const taggedPet = await env.DB.prepare(`
+      SELECT p.owner_id,
+        COALESCE(NULLIF(owner.family_id, ''), owner.id) AS owner_family_id
+      FROM pets p
+      LEFT JOIN users owner ON owner.id = p.owner_id
+      WHERE p.id = ?
+      LIMIT 1
+    `).bind(tagId).first<any>();
+    if (!taggedPet) continue;
+
+    if (taggedPet.owner_family_id) {
+      const familyUsers = await env.DB.prepare(`
+        SELECT id
+        FROM users
+        WHERE user_status != 'blocked'
+          AND COALESCE(NULLIF(family_id, ''), id) = ?
+      `).bind(taggedPet.owner_family_id).all<any>();
+      (familyUsers.results || []).forEach((row) => targetUids.add(row.id));
+    } else if (taggedPet.owner_id) {
+      targetUids.add(taggedPet.owner_id);
+    }
+  }
+
+  targetUids.delete(actorUid);
+  return [...targetUids];
+}
+
+function normalizeTagIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string' && !!item.trim()))].slice(0, 10);
+}
+
+async function notifyMentionTargets(
+  env: Env,
+  targetUids: string[],
+  actor: CurrentUser,
+  context: 'post' | 'comment',
+  postId: string,
+  commentId?: string,
+): Promise<void> {
+  if (!targetUids.length) return;
+  const copy = mentionNotification({ actorName: actor.name, context });
+  await Promise.all(targetUids.map((targetUid) => insertNotification(env, targetUid, copy.title, copy.message, {
+    type: copy.type,
+    actorId: actor.uid,
+    entityType: commentId ? 'comment' : 'post',
+    entityId: commentId || postId,
+    aggregationKey: `mention:${commentId || postId}:${targetUid}`,
+    data: { postId, ...(commentId ? { commentId } : {}) },
+  })));
+}
+
+async function listActiveFamilyUsers(env: Env, targetFamilyId: string): Promise<{ id: string }[]> {
+  const rows = await env.DB.prepare(`
+    SELECT id
+    FROM users
+    WHERE user_status = 'active'
+      AND COALESCE(NULLIF(family_id, ''), id) = ?
+  `).bind(targetFamilyId).all<any>();
+  return rows.results || [];
+}
+
 async function listPosts(env: Env, limit: number): Promise<any[]> {
   const res = await env.DB.prepare(`
     SELECT p.*,
@@ -1397,8 +1507,10 @@ async function addPostRoute(request: Request, env: Env, user: CurrentUser): Prom
     INSERT INTO posts (id, author_id, content, media_key, media_url, media_type, poster_key, poster_url, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, user.uid, data.content || '', mediaKey, mediaKey ? null : data.mediaUrl || null, data.mediaType || null, posterKey, null, now()).run();
-  if (Array.isArray(data.tags) && data.tags.length) {
-    await env.DB.batch(data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
+  const tagIds = normalizeTagIds(data.tags);
+  if (tagIds.length) {
+    await env.DB.batch(tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
+    await notifyMentionTargets(env, await resolveMentionTargets(env, tagIds, user.uid), user, 'post', id);
   }
   await publishRealtime(env, 'posts', 'all', { postId: id, action: 'created' });
   return json({ post: (await listPosts(env, 1)).find((p) => p.id === id), id });
@@ -1409,11 +1521,18 @@ async function updatePostRoute(request: Request, env: Env, user: CurrentUser, po
   if (!post) return bad('Post não encontrado.', 404);
   if (post.author_id !== user.uid && user.role !== 'admin') throw new HttpError('Sem permissão para editar este post.', 403);
   const data = await request.json<any>();
+  const existingTags = await env.DB.prepare('SELECT user_id FROM post_tags WHERE post_id = ?').bind(postId).all<any>();
+  const previousTagIds = new Set((existingTags.results || []).map((row) => String(row.user_id)));
+  const tagIds = normalizeTagIds(data.tags);
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET content = ? WHERE id = ?').bind(data.content || '', postId),
     env.DB.prepare('DELETE FROM post_tags WHERE post_id = ?').bind(postId),
-    ...(Array.isArray(data.tags) ? data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(postId, tag)) : []),
+    ...tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(postId, tag)),
   ]);
+  const newTagIds = tagIds.filter((tagId) => !previousTagIds.has(tagId));
+  if (newTagIds.length) {
+    await notifyMentionTargets(env, await resolveMentionTargets(env, newTagIds, user.uid), user, 'post', postId);
+  }
   await publishRealtime(env, 'posts', 'all', { postId, action: 'updated' });
   return json({ ok: true });
 }
@@ -1427,12 +1546,21 @@ async function deletePostRoute(env: Env, user: CurrentUser, postId: string): Pro
 }
 
 async function listComments(env: Env, postId: string): Promise<any[]> {
-  const res = await env.DB.prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at ASC').bind(postId).all<any>();
+  const res = await env.DB.prepare(`
+    SELECT c.*,
+      GROUP_CONCAT(DISTINCT pct.target_id) AS tags
+    FROM post_comments c
+    LEFT JOIN post_comment_tags pct ON pct.comment_id = c.id
+    WHERE c.post_id = ?
+    GROUP BY c.id
+    ORDER BY c.created_at ASC
+  `).bind(postId).all<any>();
   return (res.results || []).map((row) => ({
     id: row.id,
     postId: row.post_id,
     authorId: row.author_id,
     content: row.content,
+    tags: row.tags ? String(row.tags).split(',') : [],
     createdAt: row.created_at,
   }));
 }
@@ -1447,7 +1575,15 @@ async function addCommentRoute(request: Request, env: Env, user: CurrentUser, po
     INSERT INTO post_comments (id, post_id, author_id, content, created_at)
     VALUES (?, ?, ?, ?, ?)
   `).bind(id, postId, user.uid, data.content || '', now()).run();
-  if (post.author_id !== user.uid) {
+  const tagIds = normalizeTagIds(data.tags);
+  if (tagIds.length) {
+    await env.DB.batch(tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_comment_tags (comment_id, target_id, created_at) VALUES (?, ?, ?)').bind(id, tag, now())));
+  }
+
+  const mentionTargetUids = tagIds.length ? await resolveMentionTargets(env, tagIds, user.uid) : [];
+  await notifyMentionTargets(env, mentionTargetUids, user, 'comment', postId, id);
+
+  if (post.author_id !== user.uid && !mentionTargetUids.includes(post.author_id)) {
     const copy = commentNotification({ actorName: user.name });
     await insertNotification(env, post.author_id, copy.title, copy.message, {
       type: copy.type,
@@ -1752,7 +1888,7 @@ async function sendWebPush(env: Env, row: any): Promise<void> {
 }
 
 async function backup(env: Env): Promise<Record<string, unknown[]>> {
-  const tables = ['users', 'settings', 'supporter_subscriptions', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions', 'identity_link_suggestions'];
+  const tables = ['users', 'settings', 'supporter_subscriptions', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'notification_reads', 'posts', 'post_likes', 'post_tags', 'post_comments', 'post_comment_tags', 'push_subscriptions', 'identity_link_suggestions'];
   const out: Record<string, unknown[]> = {};
   for (const table of tables) {
     const res = await env.DB.prepare(`SELECT * FROM ${table}`).all();
