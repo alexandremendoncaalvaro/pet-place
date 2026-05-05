@@ -249,8 +249,19 @@ export async function markEventAsRead(eventId: string, _userId: string) {
   notifyDataChanged('events');
 }
 
+export type NotificationFilter = 'all' | 'unread' | 'social' | 'payments' | 'admin';
+
+export async function fetchNotifications({ limit = 100, offset = 0, filter = 'all' }: { limit?: number; offset?: number; filter?: NotificationFilter } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    filter,
+  });
+  return (await api<{ notifications: AppNotification[] }>(`/notifications?${params.toString()}`)).notifications;
+}
+
 export function subscribeToMyNotifications(_userId: string, _role: string, callback: (n: AppNotification[]) => void) {
-  return subscribe(async () => (await api<{ notifications: AppNotification[] }>('/notifications')).notifications, callback, 120000, ['notifications']);
+  return subscribe(async () => fetchNotifications({ limit: 200 }), callback, 120000, ['notifications']);
 }
 
 export async function markNotificationAsRead(notificationId: string) {
