@@ -1,15 +1,15 @@
 ﻿import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { updateProfile, addPet, updatePet, deletePet } from '../services/api';
-import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2 } from 'lucide-react';
+import { updateProfile, addPet, updatePet, deletePet, updateSupporterStatus } from '../services/api';
+import { User, Phone, Save, Loader2, Camera, Trash2, Plus, Edit2, Heart } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 import { useFeedback } from './Feedback';
 import { Badge, Button, Card, EmptyState, FieldGroup, FieldLabel, IconButton, Page, SectionTitle, TextInput } from './ui';
 
 export function ProfileView() {
-  const { user, myPets, publicProfiles } = useApp();
-  const { toast } = useFeedback();
+  const { user, myPets, publicProfiles, myPayments, mySupporter, appConfig } = useApp();
+  const { toast, confirm } = useFeedback();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(formatPhoneBR(user?.phone || ''));
   const [userPhoto, setUserPhoto] = useState<File | null>(null);
@@ -28,6 +28,11 @@ export function ProfileView() {
   const [familyCode, setFamilyCode] = useState('');
   const [showFamilyInput, setShowFamilyInput] = useState(false);
   const [familyLoading, setFamilyLoading] = useState(false);
+  const [supporterLoading, setSupporterLoading] = useState(false);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonthlyPayment = myPayments.find((payment) => payment.month === currentMonth && (payment.type === 'mensalidade' || !payment.type));
+  const isSupporterActive = mySupporter?.status === 'active';
+  const familyId = user?.familyId || user?.uid || '';
 
   // ... handleSave starts below ...
   const handleSave = async (e: React.FormEvent) => {
@@ -122,6 +127,34 @@ export function ProfileView() {
     setConfirmDeletePetId(null);
   };
 
+  const handleToggleSupporter = async () => {
+    if (!user || !familyId) return;
+    setSupporterLoading(true);
+    try {
+      if (isSupporterActive) {
+        let cancelCurrentPending = false;
+        if (currentMonthlyPayment && (currentMonthlyPayment.status === 'pending' || currentMonthlyPayment.status === 'rejected')) {
+          cancelCurrentPending = await confirm({
+            title: 'Pausar apoio recorrente',
+            message: 'Você quer cancelar a mensalidade pendente deste mês ou manter apenas esta cobrança aberta?',
+            confirmLabel: 'Cancelar pendência',
+            cancelLabel: 'Manter este mês',
+            variant: 'danger',
+          });
+        }
+        await updateSupporterStatus(familyId, 'paused', { cancelCurrentPending });
+        toast(cancelCurrentPending ? 'Apoio pausado e pendência do mês cancelada.' : 'Apoio pausado para os próximos meses.');
+      } else {
+        await updateSupporterStatus(familyId, 'active');
+        toast('Você agora é apoiador recorrente. Obrigado por ajudar a manter o PetPlace.');
+      }
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao atualizar apoio recorrente.', 'error');
+    } finally {
+      setSupporterLoading(false);
+    }
+  };
+
   return (
     <Page className="space-y-6">
       <Card className="p-6 flex flex-col items-center text-center">
@@ -179,6 +212,44 @@ export function ProfileView() {
           size="lg"
         >
           {loading ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} className="mr-2" /> Salvar Perfil</>}
+        </Button>
+      </Card>
+
+      <Card className={`p-6 space-y-4 ${isSupporterActive ? 'border-success-100 bg-success-50' : ''}`}>
+        <div className="flex items-start gap-3">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${isSupporterActive ? 'bg-success-100 text-success-600' : 'bg-brand-50 text-brand-600'}`}>
+            <Heart size={20} className={isSupporterActive ? 'fill-success-100' : ''} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-semibold text-ink-900">Apoiador recorrente</h3>
+              <Badge tone={isSupporterActive ? 'success' : 'neutral'}>{isSupporterActive ? 'Ativo' : 'Pausado'}</Badge>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-ink-600">
+              {isSupporterActive
+                ? 'Sua família ajuda mensalmente a manter o PetPlace.'
+                : 'Ajude a manter limpeza, cuidados e melhorias do espaço.'}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-control border border-ink-100 bg-white/80 p-4 text-sm text-ink-600">
+          <p>
+            Mensalidade sugerida: <strong className="text-ink-900">R$ {(appConfig?.monthlyAmount || 0).toFixed(2)}</strong>
+          </p>
+          <p className="mt-1">
+            Vencimento: <strong className="text-ink-900">dia {appConfig?.dueDateDay || 10}</strong>
+          </p>
+          <p className="mt-2 text-xs text-ink-500">Você pode pausar quando quiser.</p>
+        </div>
+        <Button
+          type="button"
+          disabled={supporterLoading}
+          onClick={handleToggleSupporter}
+          variant={isSupporterActive ? 'secondary' : 'primary'}
+          className="w-full"
+          size="lg"
+        >
+          {supporterLoading ? <Loader2 size={18} className="animate-spin" /> : isSupporterActive ? 'Pausar apoio recorrente' : 'Virar apoiador recorrente'}
         </Button>
       </Card>
 

@@ -36,8 +36,8 @@ async function showLatestNotification() {
 
   await self.registration.showNotification(title, {
     body,
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    icon: '/pwa-192.png',
+    badge: '/pwa-192.png',
     vibrate: [200, 100, 200],
     tag,
     renotify: true,

@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle, Plus, Receipt, Settings, Users, Edit3, Loader2, Send, Trash2, Eye, Calendar, ChevronDown } from 'lucide-react';
-import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup, createOfflineUser, createManualPayment, resolveIdentityLinkSuggestion } from '../services/api';
-import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion } from '../lib/types';
+import { approvePayment, rejectPayment, addExpense, updateConfig, updateProfile, addEvent, deleteEvent, createCharges, deleteUserAndData, uploadProofAndSubmit, deletePayment, exportFullBackup, restoreZippedBackup, createOfflineUser, createManualPayment, resolveIdentityLinkSuggestion, updateSupporterStatus } from '../services/api';
+import { Payment, UserProfile, AppEvent, IdentityLinkSuggestion, SupporterSubscription } from '../lib/types';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { formatPhoneBR, normalizePhoneBR, PHONE_BR_PLACEHOLDER } from '../lib/utils';
 import { useFeedback } from './Feedback';
@@ -88,12 +88,58 @@ const EventCard = ({ evt, allUsers }: { evt: AppEvent, allUsers: UserProfile[] }
   );
 };
 
+function familyKey(user: UserProfile): string {
+  return user.familyId || user.uid;
+}
+
+function isFamilySupporter(allSupporters: SupporterSubscription[], familyId: string): boolean {
+  return allSupporters.some((supporter) => supporter.familyId === familyId && supporter.status === 'active');
+}
+
+function SupporterAdminControl({ person, allSupporters }: { person: UserProfile; allSupporters: SupporterSubscription[] }) {
+  const { confirm, toast } = useFeedback();
+  const [loading, setLoading] = useState(false);
+  const fId = familyKey(person);
+  const active = isFamilySupporter(allSupporters, fId);
+
+  const toggle = async () => {
+    const confirmed = await confirm({
+      title: active ? 'Pausar apoio recorrente' : 'Ativar apoio recorrente',
+      message: `${person.name} representa a família ${fId.slice(0, 8)}. Deseja ${active ? 'pausar' : 'ativar'} o apoio recorrente desta família?`,
+      confirmLabel: active ? 'Pausar' : 'Ativar',
+      variant: active ? 'danger' : 'default',
+    });
+    if (!confirmed) return;
+    setLoading(true);
+    try {
+      await updateSupporterStatus(fId, active ? 'paused' : 'active');
+      toast(active ? 'Apoio recorrente pausado.' : 'Apoio recorrente ativado.');
+    } catch (error: any) {
+      toast(error?.message || 'Erro ao atualizar apoio recorrente.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={toggle}
+      className={`mt-2 inline-flex items-center rounded-lg px-2 py-1 text-[10px] font-semibold uppercase transition-colors disabled:opacity-50 ${active ? 'bg-success-100 text-success-600' : 'bg-ink-100 text-ink-500'}`}
+      title="Alterar apoio recorrente da família"
+    >
+      {active ? 'Apoiador recorrente' : 'Não apoiador'}
+    </button>
+  );
+}
+
 export function AdminPanel() {
   return <AdminPanelContent />;
 }
 
 function AdminPanelContent() {
-  const { user, allPayments, allUsers, appConfig, identityLinkSuggestions } = useApp();
+  const { user, allPayments, allUsers, allSupporters, appConfig, identityLinkSuggestions } = useApp();
   const { confirm, toast } = useFeedback();
   const [tab, setTab] = useState<'approvals' | 'expense' | 'rateio' | 'users' | 'settings' | 'comms'>('approvals');
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
@@ -244,6 +290,7 @@ function AdminPanelContent() {
                       </>
                     )}
                   </div>
+                  <SupporterAdminControl person={u} allSupporters={allSupporters} />
                 </div>
                 <button
                   onClick={async () => {
@@ -876,31 +923,51 @@ function ExpenseForm() {
 }
 
 function RateioForm() {
-  const { allUsers } = useApp();
+  const { allUsers, allSupporters } = useApp();
   const { confirm, toast } = useFeedback();
   const [desc, setDesc] = useState('');
   const [amountStr, setAmountStr] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [selectedFamilies, setSelectedFamilies] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
-  // Active users only to avoid charging pending/blocked people unless desired, but let's just show all active
-  const selectableUsers = allUsers.filter(u => u.userStatus === 'active' || u.userStatus === undefined);
+  const selectableFamilies = useMemo(() => {
+    const byFamily = new Map<string, { familyId: string; label: string; members: UserProfile[]; isSupporter: boolean }>();
+    allUsers
+      .filter((user) => user.userStatus === 'active' || user.userStatus === undefined)
+      .forEach((user) => {
+        const fId = familyKey(user);
+        const current = byFamily.get(fId);
+        if (current) {
+          current.members.push(user);
+          return;
+        }
+        byFamily.set(fId, {
+          familyId: fId,
+          label: user.name,
+          members: [user],
+          isSupporter: isFamilySupporter(allSupporters, fId),
+        });
+      });
+    return Array.from(byFamily.values()).sort((a, b) => Number(b.isSupporter) - Number(a.isSupporter) || a.label.localeCompare(b.label));
+  }, [allUsers, allSupporters]);
 
-  const handleToggleUser = (uid: string) => {
-    setSelectedUsers(prev => {
+  useEffect(() => {
+    setSelectedFamilies(new Set(selectableFamilies.filter((family) => family.isSupporter).map((family) => family.familyId)));
+  }, [selectableFamilies]);
+
+  const handleToggleFamily = (familyId: string) => {
+    setSelectedFamilies(prev => {
       const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
+      if (next.has(familyId)) next.delete(familyId);
+      else next.add(familyId);
       return next;
     });
   };
 
-  const handleSelectAll = (selectAll: boolean) => {
-    if (selectAll) {
-      setSelectedUsers(new Set(selectableUsers.map(u => u.uid)));
-    } else {
-      setSelectedUsers(new Set());
-    }
+  const handleSelectAll = (mode: 'all' | 'supporters' | 'none') => {
+    if (mode === 'all') setSelectedFamilies(new Set(selectableFamilies.map((family) => family.familyId)));
+    else if (mode === 'supporters') setSelectedFamilies(new Set(selectableFamilies.filter((family) => family.isSupporter).map((family) => family.familyId)));
+    else setSelectedFamilies(new Set());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -914,15 +981,15 @@ function RateioForm() {
       toast('Adicione um valor válido para dividir.', 'error');
       return;
     }
-    if (selectedUsers.size === 0) {
-      toast('Selecione pelo menos uma pessoa.', 'error');
+    if (selectedFamilies.size === 0) {
+      toast('Selecione pelo menos uma família.', 'error');
       return;
     }
 
-    const valuePerPerson = amt / selectedUsers.size;
+    const valuePerFamily = amt / selectedFamilies.size;
     const isConfirmed = await confirm({
       title: 'Gerar rateio',
-      message: `O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedUsers.size} pessoas. Cada pessoa pagará R$ ${valuePerPerson.toFixed(2)}.`,
+      message: `O valor total de R$ ${amt.toFixed(2)} será dividido entre ${selectedFamilies.size} famílias. Cada família pagará R$ ${valuePerFamily.toFixed(2)}.`,
       confirmLabel: 'Gerar',
     });
     if (!isConfirmed) return;
@@ -930,21 +997,11 @@ function RateioForm() {
     setLoading(true);
 
     try {
-      // Group charges by family
-      const familyCharges: Record<string, number> = {};
-      for (const uid of selectedUsers) {
-        const user = selectableUsers.find(u => u.uid === uid);
-        if (user) {
-          const fId = user.familyId || user.uid;
-          familyCharges[fId] = (familyCharges[fId] || 0) + valuePerPerson;
-        }
-      }
-
       const currentMonth = format(new Date(), 'yyyy-MM');
-      const charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[] = Object.entries(familyCharges).map(([familyId, amount]) => ({
+      const charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[] = Array.from(selectedFamilies.values()).map((familyId: string) => ({
         familyId,
         month: currentMonth,
-        amount,
+        amount: valuePerFamily,
         status: 'pending',
         type: 'rateio',
         description: desc.trim()
@@ -955,7 +1012,7 @@ function RateioForm() {
       toast('Rateio gerado com sucesso. As famílias verão a cobrança agregada.');
       setDesc('');
       setAmountStr('');
-      setSelectedUsers(new Set());
+      setSelectedFamilies(new Set(selectableFamilies.filter((family) => family.isSupporter).map((family) => family.familyId)));
     } catch(e: any) {
       toast('Erro ao gerar rateio: ' + (e.message || e), 'error');
     } finally {
@@ -991,26 +1048,31 @@ function RateioForm() {
 
       <div className="pt-2">
         <div className="flex items-center justify-between mb-3 text-sm">
-          <label className="font-semibold text-gray-800">Pessoas a cobrar ({selectedUsers.size} sel.)</label>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => handleSelectAll(true)} className="text-blue-600 font-medium">Todas</button>
-            <button type="button" onClick={() => handleSelectAll(false)} className="text-red-500 font-medium">Nenhuma</button>
+          <label className="font-semibold text-gray-800">Famílias a cobrar ({selectedFamilies.size} sel.)</label>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => handleSelectAll('supporters')} className="text-emerald-600 font-medium">Apoiadoras</button>
+            <button type="button" onClick={() => handleSelectAll('all')} className="text-blue-600 font-medium">Todas</button>
+            <button type="button" onClick={() => handleSelectAll('none')} className="text-red-500 font-medium">Nenhuma</button>
           </div>
         </div>
         <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 pb-2 hide-scrollbar">
-          {selectableUsers.map(u => {
-            const isSelected = selectedUsers.has(u.uid);
+          {selectableFamilies.map(family => {
+            const isSelected = selectedFamilies.has(family.familyId);
             return (
               <div
-                key={u.uid}
+                key={family.familyId}
                 className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer select-none transition-colors ${isSelected ? 'bg-blue-50/50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}
-                onClick={() => handleToggleUser(u.uid)}
+                onClick={() => handleToggleFamily(family.familyId)}
               >
                 <div className={`w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600' : 'bg-white border border-gray-300'}`}>
                   {isSelected && <CheckCircle2 size={14} className="text-white" />}
                 </div>
-                <div>
-                  <p className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>{u.name}</p>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>{family.label}</p>
+                    {family.isSupporter && <Badge tone="success" className="rounded-md px-1.5 py-0.5 text-[10px] uppercase">Apoiador</Badge>}
+                  </div>
+                  <p className="text-xs text-gray-500">{family.members.length === 1 ? '1 pessoa' : `${family.members.length} pessoas`} no grupo familiar</p>
                 </div>
               </div>
             );

@@ -4,10 +4,12 @@ import { X, User, Users, PawPrint, Image as ImageIcon } from 'lucide-react';
 import { PostItem } from './PostItem';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { Badge, Card, EmptyState, IconButton, ModalSurface } from './ui';
+import { SupporterBadge } from './SupporterBadge';
+import { isFamilyActiveSupporter } from '../lib/supporters';
 
 export function GlobalModals() {
   const { 
-    publicProfiles, allPets, posts, 
+    publicProfiles, allPets, posts, allSupporters,
     viewProfileId, setViewProfileId, 
     viewPetId, setViewPetId, 
     fullscreenImage, setFullscreenImage 
@@ -15,6 +17,9 @@ export function GlobalModals() {
 
   const selectedPerson = viewProfileId ? publicProfiles.find(p => p.uid === viewProfileId) : null;
   const selectedPet = viewPetId ? allPets.find(p => p.id === viewPetId) : null;
+  const selectedPetOwner = selectedPet ? publicProfiles.find(p => p.uid === selectedPet.ownerId) : null;
+  const selectedPersonIsSupporter = selectedPerson ? isFamilyActiveSupporter(allSupporters, selectedPerson.familyId || selectedPerson.uid) : false;
+  const selectedPetFamilyIsSupporter = selectedPetOwner ? isFamilyActiveSupporter(allSupporters, selectedPetOwner.familyId || selectedPetOwner.uid) : false;
 
   const getFamilyMembers = (uid: string) => {
     const person = publicProfiles.find(p => p.uid === uid);
@@ -73,7 +78,10 @@ export function GlobalModals() {
                   <div className="w-full h-full flex items-center justify-center"><User size={40} /></div>
                 )}
               </div>
-              <h3 className="text-xl font-bold">{selectedPerson.name}</h3>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <h3 className="text-xl font-bold">{selectedPerson.name}</h3>
+                {selectedPersonIsSupporter && <SupporterBadge className="bg-white/20 text-white ring-1 ring-white/20" />}
+              </div>
               {selectedPerson.role === 'admin' && (
                 <p className="text-brand-50 text-sm capitalize">{selectedPerson.role}</p>
               )}
@@ -89,7 +97,10 @@ export function GlobalModals() {
                      <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-500 flex items-center justify-center overflow-hidden">
                        {m.photoUrl ? <img src={m.photoUrl} alt={m.name} className="w-full h-full object-cover" /> : <User size={20} />}
                      </div>
-                     <p className="font-semibold text-ink-700 text-sm">{m.name} {m.uid === selectedPerson.uid && '(Este)'}</p>
+                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                       <p className="font-semibold text-ink-700 text-sm">{m.name} {m.uid === selectedPerson.uid && '(Este)'}</p>
+                       {isFamilyActiveSupporter(allSupporters, m.familyId || m.uid) && <SupporterBadge />}
+                     </div>
                   </Card>
                 ))}
               </div>
@@ -149,7 +160,10 @@ export function GlobalModals() {
                   <div className="w-full h-full flex items-center justify-center"><PawPrint size={40} /></div>
                 )}
               </div>
-              <h3 className="text-xl font-bold">{selectedPet.name}</h3>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <h3 className="text-xl font-bold">{selectedPet.name}</h3>
+                {selectedPetFamilyIsSupporter && <SupporterBadge className="bg-white/20 text-white ring-1 ring-white/20" />}
+              </div>
               <Badge tone="warning" className="mt-1 bg-white/20 text-white">{selectedPet.breed || 'Pet'}</Badge>
             </div>
             
@@ -167,7 +181,10 @@ export function GlobalModals() {
                      <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-500 flex items-center justify-center overflow-hidden">
                        {m.photoUrl ? <img src={m.photoUrl} alt={m.name} className="w-full h-full object-cover" /> : <User size={20} />}
                      </div>
-                     <p className="font-semibold text-ink-700 text-sm">{m.name}</p>
+                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                       <p className="font-semibold text-ink-700 text-sm">{m.name}</p>
+                       {isFamilyActiveSupporter(allSupporters, m.familyId || m.uid) && <SupporterBadge />}
+                     </div>
                   </Card>
                 ))}
               </div>

@@ -1,19 +1,35 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Camera, CheckCircle2, Copy, AlertTriangle, Clock, Loader2, ImagePlus, X, Heart } from 'lucide-react';
+import { Camera, CheckCircle2, Copy, AlertTriangle, Clock, Loader2, ImagePlus, X, Heart, Receipt } from 'lucide-react';
 import { uploadProofAndSubmit } from '../services/api';
 import { PostItem } from './PostItem';
 import { NovaDoacaoModal } from './NovaDoacaoModal';
 import { useFeedback } from './Feedback';
 import { Badge, Button, Card, EmptyState, IconButton, ModalSurface, SectionTitle } from './ui';
+import { isSupporterActiveForMonth } from '../lib/supporters';
 
-export function ResidentDashboard() {
-  const { user, myPayments, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
+interface FeedFocusTarget {
+  postId: string;
+  openComments?: boolean;
+  token: number;
+}
+
+export function ResidentDashboard({
+  onBecomeSupporter,
+  onOpenTransparency,
+  focusTarget,
+}: {
+  onBecomeSupporter?: () => void;
+  onOpenTransparency?: () => void;
+  focusTarget?: FeedFocusTarget | null;
+}) {
+  const { myPayments, mySupporter, allExpenses, appConfig, posts, loadMorePosts, postLimit, setFullscreenImage } = useApp();
   const { toast } = useFeedback();
   const currentMonth = format(new Date(), 'yyyy-MM');
   const currentPayment = myPayments.find(p => p.month === currentMonth);
+  const isSupporterActive = isSupporterActiveForMonth(mySupporter, currentMonth);
   const [copied, setCopied] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -24,6 +40,18 @@ export function ResidentDashboard() {
 
   const monthLabel = format(parseISO(`${currentMonth}-01`), 'MMMM', { locale: ptBR });
   const pixKeyToUse = appConfig?.pixKey || "Não configurada";
+  const monthlyExpenses = useMemo(
+    () => allExpenses.filter((expense) => expense.date.startsWith(currentMonth)).reduce((total, expense) => total + expense.amount, 0),
+    [allExpenses, currentMonth],
+  );
+  const shouldShowPaymentBanner = !!currentPayment && currentPayment.status !== 'approved';
+
+  useEffect(() => {
+    if (!focusTarget?.postId) return;
+    window.setTimeout(() => {
+      document.getElementById(`post-${focusTarget.postId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }, [focusTarget?.postId, focusTarget?.token, posts.length]);
 
   const handleCopyPix = () => {
     navigator.clipboard.writeText(pixKeyToUse);
@@ -45,31 +73,47 @@ export function ResidentDashboard() {
     }
   };
 
-  if (!currentPayment) {
+  if (!shouldShowPaymentBanner) {
     return (
       <div className="pb-24">
-        <Card tone="muted" className="m-4 p-5">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-full bg-warning-100 text-warning-600">
-              <AlertTriangle size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-ink-900">Mensalidade de {monthLabel}</h2>
-              <p className="text-xs text-ink-500 mt-1">
-                Ainda não existe cobrança para este mês. Se a página acabou de abrir, aguarde alguns segundos ou recarregue.
-              </p>
-            </div>
-          </div>
-        </Card>
+        {!isSupporterActive && (
+          <SupporterInviteCard
+            className="m-4"
+            monthlyExpenses={monthlyExpenses}
+            onBecomeSupporter={onBecomeSupporter}
+            onOpenTransparency={onOpenTransparency}
+          />
+        )}
 
         <div className="px-4 space-y-6">
+          <InstachorroHeader />
+
           {posts.length === 0 ? (
             <EmptyState>
               <ImagePlus size={40} className="mx-auto mb-3 opacity-20" />
               <p>Nenhuma foto ainda. Seja o primeiro a postar!</p>
             </EmptyState>
           ) : (
-            posts.map(post => <PostItem key={post.id} post={post} />)
+            posts.map((post, index) => (
+              <React.Fragment key={post.id}>
+                <div id={`post-${post.id}`} className="scroll-mt-24">
+                  <PostItem
+                    post={post}
+                    autoOpenComments={focusTarget?.postId === post.id && !!focusTarget.openComments}
+                    focusToken={focusTarget?.token}
+                    highlighted={focusTarget?.postId === post.id}
+                  />
+                </div>
+                {!isSupporterActive && shouldShowSupporterFeedCard(index) && (
+                  <SupporterInviteCard
+                    compact
+                    monthlyExpenses={monthlyExpenses}
+                    onBecomeSupporter={onBecomeSupporter}
+                    onOpenTransparency={onOpenTransparency}
+                  />
+                )}
+              </React.Fragment>
+            ))
           )}
         </div>
       </div>
@@ -134,11 +178,29 @@ export function ResidentDashboard() {
 
       {/* Feed Area */}
       <div className="px-4 space-y-6">
+        <InstachorroHeader />
         
         {/* Posts List */}
         <div className="space-y-6">
-          {posts.map(post => (
-            <PostItem key={post.id} post={post} />
+          {posts.map((post, index) => (
+            <React.Fragment key={post.id}>
+              <div id={`post-${post.id}`} className="scroll-mt-24">
+                <PostItem
+                  post={post}
+                  autoOpenComments={focusTarget?.postId === post.id && !!focusTarget.openComments}
+                  focusToken={focusTarget?.token}
+                  highlighted={focusTarget?.postId === post.id}
+                />
+              </div>
+              {!isSupporterActive && shouldShowSupporterFeedCard(index) && (
+                <SupporterInviteCard
+                  compact
+                  monthlyExpenses={monthlyExpenses}
+                  onBecomeSupporter={onBecomeSupporter}
+                  onOpenTransparency={onOpenTransparency}
+                />
+              )}
+            </React.Fragment>
           ))}
           {posts.length === 0 && (
             <EmptyState>
@@ -249,4 +311,62 @@ export function ResidentDashboard() {
       {showDonationModal && <NovaDoacaoModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );
+}
+
+function InstachorroHeader() {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <img src="/instachorro.png" alt="" className="h-9 w-9 shrink-0 rounded-xl" />
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-extrabold text-ink-900">Instachorro</h2>
+          <p className="text-xs font-medium text-ink-500">PetPlace</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupporterInviteCard({
+  monthlyExpenses,
+  onBecomeSupporter,
+  onOpenTransparency,
+  compact = false,
+  className = '',
+}: {
+  monthlyExpenses: number;
+  onBecomeSupporter?: () => void;
+  onOpenTransparency?: () => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  const expenseCopy = monthlyExpenses > 0
+    ? `Este mês já tivemos R$ ${monthlyExpenses.toFixed(2)} em cuidados do espaço.`
+    : 'Todo mês a comunidade cuida de limpeza, manutenção e melhorias do espaço.';
+
+  return (
+    <Card tone="brand" className={`relative overflow-hidden p-5 shadow-none ${className}`}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-brand-600 shadow-sm">
+          {compact ? <Receipt size={18} /> : <Heart size={18} className="fill-brand-100" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink-900">{compact ? 'Ajude a manter o PetPlace' : 'Seja um apoiador recorrente'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-600">{expenseCopy}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={onBecomeSupporter} size="sm" className="rounded-full">
+              Virar apoiador
+            </Button>
+            <Button onClick={onOpenTransparency} variant="ghost" size="sm" className="rounded-full bg-white/70 text-brand-700">
+              Ver extrato
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function shouldShowSupporterFeedCard(index: number) {
+  return index === 1 || (index > 1 && (index + 1) % 6 === 0);
 }

@@ -1,13 +1,15 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from 'cloudflare:workers';
-import { commentNotification, likeNotification } from '../src/lib/notificationPolicy';
+import { commentNotification, likeNotification, mentionNotification, paymentStatusNotification } from '../src/lib/notificationPolicy';
+import { getSupporterStartMonth, isSupporterActiveForMonth } from '../src/lib/supporters';
 import { serializeExpense, serializePayment } from './financialRecords';
 import { mediaUrl } from './media';
 import { accessFamilyId, canAccessMediaReference, type MediaAccessReference } from './security';
 
 type Role = 'admin' | 'resident';
 type PaymentStatus = 'pending' | 'analyzing' | 'approved' | 'rejected';
+type SupporterStatus = 'active' | 'paused';
 
 interface Env {
   DB: D1Database;
@@ -41,6 +43,16 @@ interface CurrentUser {
   userStatus: 'pending' | 'active' | 'blocked';
   isOffline?: boolean;
   createdAt: string;
+}
+
+interface SupporterSubscription {
+  familyId: string;
+  status: SupporterStatus;
+  activeSinceMonth?: string;
+  pausedAt?: string;
+  source: 'migration' | 'self' | 'admin';
+  createdAt: string;
+  updatedAt: string;
 }
 
 type RealtimeTarget = 'all' | 'admins' | string;
@@ -124,6 +136,7 @@ export default {
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(processScheduledEvents(env));
+    ctx.waitUntil(processMonthlySupporterPayments(env));
   },
 };
 
@@ -142,11 +155,12 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     await routeMediaApi(path, method, request, env, user) ||
     await routeConfigApi(path, method, request, env, user) ||
     await routeUsersApi(path, method, request, env, user) ||
+    await routeSupportersApi(path, method, request, url, env, user) ||
     await routePaymentsApi(path, method, request, url, env, user) ||
     await routeExpensesApi(path, method, request, env, user) ||
     await routePetsApi(path, method, request, url, env, user) ||
     await routeEventsApi(path, method, request, env, ctx, user) ||
-    await routeNotificationsApi(path, method, request, env, user) ||
+    await routeNotificationsApi(path, method, request, url, env, user) ||
     await routePostsApi(path, method, request, url, env, user) ||
     await routePushApi(path, method, request, env, user) ||
     await routeBackupApi(path, method, env, user);
@@ -220,6 +234,26 @@ async function routeUsersApi(path: string, method: string, request: Request, env
   return null;
 }
 
+async function routeSupportersApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path === '/supporters' && method === 'GET') {
+    const all = url.searchParams.get('all') === '1';
+    if (all) {
+      return json({ supporters: user.role === 'admin' ? await listSupporterSubscriptions(env) : await listPublicSupporterSubscriptions(env) });
+    }
+    const requestedFamily = url.searchParams.get('familyId') || familyId(user);
+    if (requestedFamily !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para esta família.', 403);
+    return json({ supporter: await getSupporterSubscription(env, requestedFamily) });
+  }
+
+  if (path.match(/^\/supporters\/[^/]+$/) && method === 'PATCH') {
+    const targetFamilyId = decodeURIComponent(path.split('/')[2]);
+    if (targetFamilyId !== familyId(user) && user.role !== 'admin') throw new HttpError('Sem permissão para alterar este apoio.', 403);
+    return updateSupporterSubscriptionRoute(request, env, user, targetFamilyId);
+  }
+
+  return null;
+}
+
 async function routePaymentsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
   if (path === '/payments/ensure-current-month' && method === 'POST') return ensureCurrentMonthPaymentRoute(request, env, user);
   if (path === '/payments' && method === 'GET') return listPaymentsRoute(url, env, user);
@@ -283,8 +317,14 @@ async function routeEventsApi(path: string, method: string, request: Request, en
   return null;
 }
 
-async function routeNotificationsApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
-  if (path === '/notifications' && method === 'GET') return json({ notifications: await listNotifications(env, user) });
+async function routeNotificationsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path === '/notifications' && method === 'GET') {
+    return json({ notifications: await listNotifications(env, user, {
+      limit: Number(url.searchParams.get('limit') || 100),
+      offset: Number(url.searchParams.get('offset') || 0),
+      filter: url.searchParams.get('filter') || 'all',
+    }) });
+  }
   if (path === '/notifications/latest' && method === 'GET') return json({ notification: await latestNotification(env, user) });
   if (path === '/notifications' && method === 'POST') return addNotificationRoute(request, env, user);
   if (path.match(/^\/notifications\/[^/]+\/read$/) && method === 'PATCH') return markNotificationRead(env, user, path.split('/')[2]);
@@ -665,6 +705,7 @@ async function updateIdentityLinkSuggestionRoute(request: Request, env: Env, use
             AND approved.id != payments.id
         )
     `).bind(sourceFamily).run();
+    await mergeSupporterSubscriptions(env, sourceFamily, targetFamily, timestamp);
   }
 
   await env.DB.prepare(`
@@ -686,6 +727,7 @@ async function deleteUser(env: Env, userId: string): Promise<void> {
     env.DB.prepare('DELETE FROM pets WHERE owner_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM posts WHERE author_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM payments WHERE family_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM supporter_subscriptions WHERE family_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ]);
   await publishRealtime(env, 'users', 'admins', { userId, action: 'deleted' });
@@ -738,6 +780,117 @@ async function updateConfig(env: Env, data: any): Promise<any> {
   return updated;
 }
 
+function rowToSupporter(row: any, fallbackFamilyId?: string): SupporterSubscription {
+  return {
+    familyId: row?.family_id || fallbackFamilyId || '',
+    status: row?.status === 'active' ? 'active' : 'paused',
+    activeSinceMonth: row?.active_since_month || undefined,
+    pausedAt: row?.paused_at || undefined,
+    source: row?.source || 'self',
+    createdAt: row?.created_at || '',
+    updatedAt: row?.updated_at || '',
+  };
+}
+
+async function getSupporterSubscription(env: Env, targetFamilyId: string): Promise<SupporterSubscription> {
+  const row = await env.DB.prepare('SELECT * FROM supporter_subscriptions WHERE family_id = ?').bind(targetFamilyId).first<any>();
+  return rowToSupporter(row, targetFamilyId);
+}
+
+async function listSupporterSubscriptions(env: Env): Promise<SupporterSubscription[]> {
+  const rows = await env.DB.prepare('SELECT * FROM supporter_subscriptions ORDER BY updated_at DESC').all<any>();
+  return (rows.results || []).map((row) => rowToSupporter(row));
+}
+
+async function listPublicSupporterSubscriptions(env: Env): Promise<SupporterSubscription[]> {
+  const rows = await env.DB.prepare("SELECT family_id, status, active_since_month, paused_at, source, created_at, updated_at FROM supporter_subscriptions WHERE status = 'active' ORDER BY updated_at DESC").all<any>();
+  return (rows.results || []).map((row) => rowToSupporter(row));
+}
+
+async function isFamilyActiveSupporter(env: Env, targetFamilyId: string, month: string): Promise<boolean> {
+  return isSupporterActiveForMonth(await getSupporterSubscription(env, targetFamilyId), month);
+}
+
+async function mergeSupporterSubscriptions(env: Env, sourceFamily: string, targetFamily: string, timestamp: string): Promise<void> {
+  if (sourceFamily === targetFamily) return;
+  const source = await getSupporterSubscription(env, sourceFamily);
+  const target = await getSupporterSubscription(env, targetFamily);
+  if (target.status === 'active' && source.status !== 'active') {
+    await env.DB.prepare(`
+      INSERT INTO supporter_subscriptions (family_id, status, active_since_month, paused_at, source, created_at, updated_at)
+      VALUES (?, 'active', ?, NULL, ?, ?, ?)
+      ON CONFLICT(family_id) DO UPDATE SET
+        status = 'active',
+        active_since_month = excluded.active_since_month,
+        paused_at = NULL,
+        source = excluded.source,
+        updated_at = excluded.updated_at
+    `).bind(
+      sourceFamily,
+      target.activeSinceMonth || new Date().toISOString().slice(0, 7),
+      target.source,
+      source.createdAt || timestamp,
+      timestamp,
+    ).run();
+  }
+  await env.DB.prepare('DELETE FROM supporter_subscriptions WHERE family_id = ?').bind(targetFamily).run();
+  await publishRealtime(env, 'supporters', 'all', { familyId: sourceFamily, action: 'identity-link-resolved' });
+}
+
+async function updateSupporterSubscriptionRoute(request: Request, env: Env, user: CurrentUser, targetFamilyId: string): Promise<Response> {
+  const body = await request.json<{ status?: SupporterStatus; cancelCurrentPending?: boolean }>();
+  if (body.status !== 'active' && body.status !== 'paused') return bad('Status de apoio inválido.', 400);
+
+  const existing = await getSupporterSubscription(env, targetFamilyId);
+  const timestamp = now();
+  const source = user.role === 'admin' && targetFamilyId !== familyId(user) ? 'admin' : 'self';
+  const config = await getConfig(env);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const activeSinceMonth = body.status === 'active'
+    ? existing.status === 'active'
+      ? existing.activeSinceMonth || getSupporterStartMonth(new Date(), config?.dueDateDay || 10)
+      : getSupporterStartMonth(new Date(), config?.dueDateDay || 10)
+    : existing.activeSinceMonth || null;
+
+  await env.DB.prepare(`
+    INSERT INTO supporter_subscriptions (family_id, status, active_since_month, paused_at, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(family_id) DO UPDATE SET
+      status = excluded.status,
+      active_since_month = excluded.active_since_month,
+      paused_at = excluded.paused_at,
+      source = excluded.source,
+      updated_at = excluded.updated_at
+  `).bind(
+    targetFamilyId,
+    body.status,
+    activeSinceMonth,
+    body.status === 'paused' ? timestamp : null,
+    source,
+    existing.createdAt || timestamp,
+    timestamp,
+  ).run();
+
+  if (body.status === 'paused' && body.cancelCurrentPending) {
+    await env.DB.prepare(`
+      DELETE FROM payments
+      WHERE family_id = ?
+        AND month = ?
+        AND (type IS NULL OR type = 'mensalidade')
+        AND status IN ('pending', 'rejected')
+    `).bind(targetFamilyId, currentMonth).run();
+    await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month: currentMonth, action: 'supporter-paused' });
+  }
+
+  if (body.status === 'active' && activeSinceMonth === currentMonth) {
+    await ensureMonthlyPaymentForFamily(env, targetFamilyId, currentMonth, config?.monthlyAmount || 0);
+  }
+
+  await publishRealtime(env, 'supporters', 'all', { familyId: targetFamilyId, status: body.status });
+  if (body.status === 'active') await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month: currentMonth, action: 'supporter-active' });
+  return json({ supporter: await getSupporterSubscription(env, targetFamilyId) });
+}
+
 async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: CurrentUser): Promise<Response> {
   const body = await request.json<{ familyId: string }>();
   const targetFamilyId = body.familyId || familyId(user);
@@ -745,6 +898,12 @@ async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: 
   const config = await getConfig(env);
   if (!config) return json({ ok: true, skipped: true });
   const month = new Date().toISOString().slice(0, 7);
+  if (!await isFamilyActiveSupporter(env, targetFamilyId, month)) return json({ ok: true, skipped: true, reason: 'not-supporter' });
+  const created = await ensureMonthlyPaymentForFamily(env, targetFamilyId, month, config.monthlyAmount);
+  return json({ ok: true, created });
+}
+
+async function ensureMonthlyPaymentForFamily(env: Env, targetFamilyId: string, month: string, amount: number): Promise<boolean> {
   const existing = await env.DB.prepare(`
     SELECT id FROM payments
     WHERE family_id = ? AND month = ? AND (type IS NULL OR type = 'mensalidade')
@@ -754,10 +913,11 @@ async function ensureCurrentMonthPaymentRoute(request: Request, env: Env, user: 
     await env.DB.prepare(`
       INSERT INTO payments (id, family_id, month, amount, proof_url, status, type, created_at, updated_at)
       VALUES (?, ?, ?, ?, '', 'pending', 'mensalidade', ?, ?)
-    `).bind(newId('pay'), targetFamilyId, month, config.monthlyAmount, timestamp, timestamp).run();
+    `).bind(newId('pay'), targetFamilyId, month, amount, timestamp, timestamp).run();
     await publishRealtime(env, 'payments', 'all', { familyId: targetFamilyId, month, action: 'created' });
+    return true;
   }
-  return json({ ok: true });
+  return false;
 }
 
 async function listPaymentsRoute(url: URL, env: Env, user: CurrentUser): Promise<Response> {
@@ -799,7 +959,12 @@ async function submitDonationRoute(request: Request, env: Env, user: CurrentUser
     INSERT INTO payments (id, family_id, month, amount, proof_key, proof_url, status, type, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, '', 'analyzing', 'doacao', ?, ?)
   `).bind(id, targetFamilyId, timestamp.slice(0, 7), amount, proofKey, timestamp, timestamp).run();
-  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${amount.toFixed(2)} aguarda análise.`);
+  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${amount.toFixed(2)} aguarda análise.`, {
+    type: 'payment',
+    entityType: 'payment',
+    entityId: id,
+    data: { paymentId: id, familyId: targetFamilyId },
+  });
   await publishRealtime(env, 'payments', 'all', { paymentId: id, familyId: targetFamilyId, action: 'created' });
   return json({ payment: (await listPayments(env, targetFamilyId, { includeProofs: true })).find((p) => p.id === id) });
 }
@@ -859,7 +1024,12 @@ async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, p
   const key = await putFile(env, 'proofs', file);
   await env.DB.prepare('UPDATE payments SET proof_key = ?, proof_url = "", status = "analyzing", updated_at = ? WHERE id = ?')
     .bind(key, now(), paymentId).run();
-  await insertNotification(env, 'admins', 'Comprovante Recebido', 'Um novo comprovante foi anexado e aguarda avaliação.');
+  await insertNotification(env, 'admins', 'Comprovante Recebido', 'Um novo comprovante foi anexado e aguarda avaliação.', {
+    type: 'payment',
+    entityType: 'payment',
+    entityId: paymentId,
+    data: { paymentId, familyId: payment.family_id },
+  });
   await publishRealtime(env, 'payments', 'all', { paymentId, familyId: payment.family_id, action: 'proof-uploaded' });
   return json({ ok: true });
 }
@@ -867,7 +1037,20 @@ async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, p
 async function updatePaymentStatusRoute(request: Request, env: Env, paymentId: string): Promise<Response> {
   const body = await request.json<{ status: PaymentStatus }>();
   if (!['pending', 'analyzing', 'approved', 'rejected'].includes(body.status)) return bad('Status inválido.', 400);
+  const payment = await env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(paymentId).first<any>();
+  if (!payment) return bad('Pagamento não encontrado.', 404);
   await env.DB.prepare('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?').bind(body.status, now(), paymentId).run();
+  if ((body.status === 'approved' || body.status === 'rejected') && payment.status !== body.status) {
+    const copy = paymentStatusNotification(body.status);
+    const users = await listActiveFamilyUsers(env, payment.family_id);
+    await Promise.all(users.map((target) => insertNotification(env, target.id, copy.title, copy.message, {
+      type: copy.type,
+      entityType: 'payment',
+      entityId: paymentId,
+      aggregationKey: `payment_status:${paymentId}:${body.status}:${target.id}`,
+      data: { paymentId, month: payment.month, status: body.status },
+    })));
+  }
   await publishRealtime(env, 'payments', 'all', { paymentId, status: body.status, action: 'status-updated' });
   return json({ ok: true });
 }
@@ -1066,20 +1249,41 @@ async function markEventRead(env: Env, user: CurrentUser, eventId: string): Prom
   return json({ ok: true });
 }
 
-async function listNotifications(env: Env, user: CurrentUser): Promise<any[]> {
+async function listNotifications(env: Env, user: CurrentUser, options: { limit?: number; offset?: number; filter?: string } = {}): Promise<any[]> {
   const targets = user.role === 'admin' ? [user.uid, 'all', 'admins'] : [user.uid, 'all'];
   const placeholders = targets.map(() => '?').join(',');
+  const limit = Math.max(1, Math.min(Number(options.limit || 100), 200));
+  const offset = Math.max(0, Number(options.offset || 0));
+  const filterClause = notificationFilterClause(options.filter || 'all', user);
   const res = await env.DB.prepare(`
-    SELECT * FROM notifications
-    WHERE user_id IN (${placeholders})
+    SELECT *
+    FROM (
+      SELECT n.*,
+        CASE
+          WHEN n.user_id IN ('all', 'admins') THEN CASE WHEN nr.user_id IS NULL THEN 0 ELSE 1 END
+          ELSE n.is_read
+        END AS computed_is_read
+      FROM notifications n
+      LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
+      WHERE n.user_id IN (${placeholders})
+    )
+    WHERE ${filterClause}
     ORDER BY created_at DESC
-    LIMIT 100
-  `).bind(...targets).all<any>();
+    LIMIT ? OFFSET ?
+  `).bind(user.uid, ...targets, limit, offset).all<any>();
   return (res.results || []).map(rowToNotification);
 }
 
 async function latestNotification(env: Env, user: CurrentUser): Promise<any | null> {
   return (await listNotifications(env, user))[0] || null;
+}
+
+function notificationFilterClause(filter: string, user: CurrentUser): string {
+  if (filter === 'unread') return 'computed_is_read = 0';
+  if (filter === 'social') return "type IN ('post_comment', 'post_like', 'mention')";
+  if (filter === 'payments') return "type = 'payment'";
+  if (filter === 'admin' && user.role === 'admin') return "user_id = 'admins'";
+  return '1 = 1';
 }
 
 function rowToNotification(row: any): any {
@@ -1094,7 +1298,7 @@ function rowToNotification(row: any): any {
     userId: row.user_id,
     title: row.title,
     message: row.message,
-    isRead: !!row.is_read,
+    isRead: !!(row.computed_is_read ?? row.is_read),
     createdAt: row.created_at,
     type: row.type || 'generic',
     actorId: row.actor_id || undefined,
@@ -1114,10 +1318,19 @@ async function addNotificationRoute(request: Request, env: Env, user: CurrentUse
 }
 
 async function markNotificationRead(env: Env, user: CurrentUser, id: string): Promise<Response> {
-  await env.DB.prepare(`
-    UPDATE notifications SET is_read = 1
-    WHERE id = ? AND (user_id = ? OR user_id = 'all' OR (user_id = 'admins' AND ? = 'admin'))
-  `).bind(id, user.uid, user.role).run();
+  const notification = await env.DB.prepare('SELECT user_id FROM notifications WHERE id = ?').bind(id).first<any>();
+  if (!notification) return json({ ok: true });
+  if (notification.user_id === user.uid) {
+    await env.DB.prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?').bind(id, user.uid).run();
+  } else if (notification.user_id === 'all' || (notification.user_id === 'admins' && user.role === 'admin')) {
+    await env.DB.prepare(`
+      INSERT INTO notification_reads (notification_id, user_id, read_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(notification_id, user_id) DO UPDATE SET read_at = excluded.read_at
+    `).bind(id, user.uid, now()).run();
+  } else {
+    throw new HttpError('Sem permissão para marcar esta notificação.', 403);
+  }
   await publishRealtime(env, 'notifications', user.uid, { id, action: 'read' });
   return json({ ok: true });
 }
@@ -1202,6 +1415,84 @@ async function countPostLikes(env: Env, postId: string): Promise<number> {
   return Number(row?.count || 0);
 }
 
+async function resolveMentionTargets(env: Env, tagIds: string[], actorUid: string): Promise<string[]> {
+  const uniqueTagIds = normalizeTagIds(tagIds);
+  const targetUids = new Set<string>();
+
+  for (const tagId of uniqueTagIds) {
+    const taggedUser = await env.DB.prepare(`
+      SELECT id
+      FROM users
+      WHERE id = ? AND user_status != 'blocked'
+      LIMIT 1
+    `).bind(tagId).first<any>();
+    if (taggedUser?.id) {
+      targetUids.add(taggedUser.id);
+      continue;
+    }
+
+    const taggedPet = await env.DB.prepare(`
+      SELECT p.owner_id,
+        COALESCE(NULLIF(owner.family_id, ''), owner.id) AS owner_family_id
+      FROM pets p
+      LEFT JOIN users owner ON owner.id = p.owner_id
+      WHERE p.id = ?
+      LIMIT 1
+    `).bind(tagId).first<any>();
+    if (!taggedPet) continue;
+
+    if (taggedPet.owner_family_id) {
+      const familyUsers = await env.DB.prepare(`
+        SELECT id
+        FROM users
+        WHERE user_status != 'blocked'
+          AND COALESCE(NULLIF(family_id, ''), id) = ?
+      `).bind(taggedPet.owner_family_id).all<any>();
+      (familyUsers.results || []).forEach((row) => targetUids.add(row.id));
+    } else if (taggedPet.owner_id) {
+      targetUids.add(taggedPet.owner_id);
+    }
+  }
+
+  targetUids.delete(actorUid);
+  return [...targetUids];
+}
+
+function normalizeTagIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string' && !!item.trim()))].slice(0, 10);
+}
+
+async function notifyMentionTargets(
+  env: Env,
+  targetUids: string[],
+  actor: CurrentUser,
+  context: 'post' | 'comment',
+  postId: string,
+  commentId?: string,
+): Promise<void> {
+  if (!targetUids.length) return;
+  const copy = mentionNotification({ actorName: actor.name, context });
+  await Promise.all(targetUids.map((targetUid) => insertNotification(env, targetUid, copy.title, copy.message, {
+    type: copy.type,
+    actorId: actor.uid,
+    entityType: commentId ? 'comment' : 'post',
+    entityId: commentId || postId,
+    aggregationKey: `mention:${commentId || postId}:${targetUid}`,
+    data: { postId, ...(commentId ? { commentId } : {}) },
+  })));
+}
+
+async function listActiveFamilyUsers(env: Env, targetFamilyId: string): Promise<{ id: string }[]> {
+  const rows = await env.DB.prepare(`
+    SELECT id
+    FROM users
+    WHERE user_status = 'active'
+      AND COALESCE(NULLIF(family_id, ''), id) = ?
+  `).bind(targetFamilyId).all<any>();
+  return rows.results || [];
+}
+
 async function listPosts(env: Env, limit: number): Promise<any[]> {
   const res = await env.DB.prepare(`
     SELECT p.*,
@@ -1247,8 +1538,10 @@ async function addPostRoute(request: Request, env: Env, user: CurrentUser): Prom
     INSERT INTO posts (id, author_id, content, media_key, media_url, media_type, poster_key, poster_url, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, user.uid, data.content || '', mediaKey, mediaKey ? null : data.mediaUrl || null, data.mediaType || null, posterKey, null, now()).run();
-  if (Array.isArray(data.tags) && data.tags.length) {
-    await env.DB.batch(data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
+  const tagIds = normalizeTagIds(data.tags);
+  if (tagIds.length) {
+    await env.DB.batch(tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(id, tag)));
+    await notifyMentionTargets(env, await resolveMentionTargets(env, tagIds, user.uid), user, 'post', id);
   }
   await publishRealtime(env, 'posts', 'all', { postId: id, action: 'created' });
   return json({ post: (await listPosts(env, 1)).find((p) => p.id === id), id });
@@ -1259,11 +1552,18 @@ async function updatePostRoute(request: Request, env: Env, user: CurrentUser, po
   if (!post) return bad('Post não encontrado.', 404);
   if (post.author_id !== user.uid && user.role !== 'admin') throw new HttpError('Sem permissão para editar este post.', 403);
   const data = await request.json<any>();
+  const existingTags = await env.DB.prepare('SELECT user_id FROM post_tags WHERE post_id = ?').bind(postId).all<any>();
+  const previousTagIds = new Set((existingTags.results || []).map((row) => String(row.user_id)));
+  const tagIds = normalizeTagIds(data.tags);
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET content = ? WHERE id = ?').bind(data.content || '', postId),
     env.DB.prepare('DELETE FROM post_tags WHERE post_id = ?').bind(postId),
-    ...(Array.isArray(data.tags) ? data.tags.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(postId, tag)) : []),
+    ...tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_tags (post_id, user_id) VALUES (?, ?)').bind(postId, tag)),
   ]);
+  const newTagIds = tagIds.filter((tagId) => !previousTagIds.has(tagId));
+  if (newTagIds.length) {
+    await notifyMentionTargets(env, await resolveMentionTargets(env, newTagIds, user.uid), user, 'post', postId);
+  }
   await publishRealtime(env, 'posts', 'all', { postId, action: 'updated' });
   return json({ ok: true });
 }
@@ -1277,12 +1577,21 @@ async function deletePostRoute(env: Env, user: CurrentUser, postId: string): Pro
 }
 
 async function listComments(env: Env, postId: string): Promise<any[]> {
-  const res = await env.DB.prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at ASC').bind(postId).all<any>();
+  const res = await env.DB.prepare(`
+    SELECT c.*,
+      GROUP_CONCAT(DISTINCT pct.target_id) AS tags
+    FROM post_comments c
+    LEFT JOIN post_comment_tags pct ON pct.comment_id = c.id
+    WHERE c.post_id = ?
+    GROUP BY c.id
+    ORDER BY c.created_at ASC
+  `).bind(postId).all<any>();
   return (res.results || []).map((row) => ({
     id: row.id,
     postId: row.post_id,
     authorId: row.author_id,
     content: row.content,
+    tags: row.tags ? String(row.tags).split(',') : [],
     createdAt: row.created_at,
   }));
 }
@@ -1297,7 +1606,15 @@ async function addCommentRoute(request: Request, env: Env, user: CurrentUser, po
     INSERT INTO post_comments (id, post_id, author_id, content, created_at)
     VALUES (?, ?, ?, ?, ?)
   `).bind(id, postId, user.uid, data.content || '', now()).run();
-  if (post.author_id !== user.uid) {
+  const tagIds = normalizeTagIds(data.tags);
+  if (tagIds.length) {
+    await env.DB.batch(tagIds.map((tag: string) => env.DB.prepare('INSERT OR IGNORE INTO post_comment_tags (comment_id, target_id, created_at) VALUES (?, ?, ?)').bind(id, tag, now())));
+  }
+
+  const mentionTargetUids = tagIds.length ? await resolveMentionTargets(env, tagIds, user.uid) : [];
+  await notifyMentionTargets(env, mentionTargetUids, user, 'comment', postId, id);
+
+  if (post.author_id !== user.uid && !mentionTargetUids.includes(post.author_id)) {
     const copy = commentNotification({ actorName: user.name });
     await insertNotification(env, post.author_id, copy.title, copy.message, {
       type: copy.type,
@@ -1512,6 +1829,63 @@ async function processScheduledEvents(env: Env): Promise<void> {
   }
 }
 
+async function processMonthlySupporterPayments(env: Env): Promise<void> {
+  const config = await getConfig(env);
+  if (!config || !Number.isFinite(config.monthlyAmount) || config.monthlyAmount <= 0) return;
+  const current = new Date();
+  const month = current.toISOString().slice(0, 7);
+  const supporters = await env.DB.prepare(`
+    SELECT *
+    FROM supporter_subscriptions
+    WHERE status = 'active'
+      AND (active_since_month IS NULL OR active_since_month <= ?)
+  `).bind(month).all<any>();
+
+  for (const supporter of supporters.results || []) {
+    await ensureMonthlyPaymentForFamily(env, supporter.family_id, month, config.monthlyAmount);
+    if (current.getUTCDate() >= Number(config.dueDateDay || 10)) {
+      await notifyFamilyAboutPendingMonthlyPayment(env, supporter.family_id, month, config);
+    }
+  }
+}
+
+async function notifyFamilyAboutPendingMonthlyPayment(env: Env, targetFamilyId: string, month: string, config: any): Promise<void> {
+  const payment = await env.DB.prepare(`
+    SELECT *
+    FROM payments
+    WHERE family_id = ?
+      AND month = ?
+      AND (type IS NULL OR type = 'mensalidade')
+      AND status IN ('pending', 'rejected')
+    LIMIT 1
+  `).bind(targetFamilyId, month).first<any>();
+  if (!payment) return;
+
+  const users = await env.DB.prepare(`
+    SELECT id
+    FROM users
+    WHERE user_status = 'active'
+      AND COALESCE(NULLIF(family_id, ''), id) = ?
+  `).bind(targetFamilyId).all<any>();
+
+  for (const row of users.results || []) {
+    const aggregationKey = `payment_due:${targetFamilyId}:${month}`;
+    const existing = await env.DB.prepare(`
+      SELECT id FROM notifications
+      WHERE user_id = ? AND aggregation_key = ?
+      LIMIT 1
+    `).bind(row.id, aggregationKey).first<any>();
+    if (existing) continue;
+    await insertNotification(env, row.id, 'Mensalidade do PetPlace', `A contribuição de R$ ${Number(config.monthlyAmount).toFixed(2)} vence no dia ${config.dueDateDay}.`, {
+      type: 'payment',
+      entityType: 'payment',
+      entityId: payment.id,
+      aggregationKey,
+      data: { paymentId: payment.id, month },
+    });
+  }
+}
+
 async function sendPushForTarget(env: Env, target: string): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return;
   const sql = target === 'all'
@@ -1545,7 +1919,7 @@ async function sendWebPush(env: Env, row: any): Promise<void> {
 }
 
 async function backup(env: Env): Promise<Record<string, unknown[]>> {
-  const tables = ['users', 'settings', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'posts', 'post_likes', 'post_tags', 'post_comments', 'push_subscriptions', 'identity_link_suggestions'];
+  const tables = ['users', 'settings', 'supporter_subscriptions', 'payments', 'expenses', 'pets', 'events', 'event_reads', 'notifications', 'notification_reads', 'posts', 'post_likes', 'post_tags', 'post_comments', 'post_comment_tags', 'push_subscriptions', 'identity_link_suggestions'];
   const out: Record<string, unknown[]> = {};
   for (const table of tables) {
     const res = await env.DB.prepare(`SELECT * FROM ${table}`).all();

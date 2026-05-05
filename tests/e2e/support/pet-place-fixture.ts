@@ -1,17 +1,19 @@
 import { expect, Locator, Page, Request, Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, UserProfile } from '../../../src/lib/types';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, Pet, PostComment, SupporterSubscription, UserProfile } from '../../../src/lib/types';
 
 export interface PetPlaceE2EState {
   user: UserProfile | null;
   users: UserProfile[];
   pets: Pet[];
   payments: Payment[];
+  supporters: SupporterSubscription[];
   expenses: Expense[];
   config: AppConfig;
   events: AppEvent[];
   notifications: AppNotification[];
+  notificationReads: Record<string, string[]>;
   posts: AppPost[];
   comments: Record<string, PostComment[]>;
   identityLinkSuggestions: IdentityLinkSuggestion[];
@@ -95,6 +97,12 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
       { id: 'payment-resident-may', familyId: 'family-resident', month: currentMonth, amount: 25, proofUrl: '/e2e/proof.svg', status: 'approved', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.residentName, userDog: names.residentPet },
       { id: 'payment-linked-pending', familyId: 'family-linked', month: currentMonth, amount: 25, proofUrl: '', status: 'pending', type: 'mensalidade', createdAt: now, updatedAt: now, userName: names.linkedName, userDog: names.linkedPet },
     ],
+    supporters: [
+      { familyId: 'family-admin', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'family-resident', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'family-linked', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+      { familyId: 'offline-tutor-cinza', status: 'active', activeSinceMonth: currentMonth, source: 'migration', createdAt: now, updatedAt: now },
+    ],
     expenses: [
       { id: 'expense-terreno', date: '2026-05-02', title: 'Manutencao do terreno', category: 'Geral', amount: 150, receiptUrl: '/e2e/proof.svg', createdBy: 'user-admin', createdAt: now },
     ],
@@ -111,6 +119,7 @@ export function createPetPlaceState(options: { role?: 'admin' | 'resident'; unau
     notifications: [
       { id: 'notification-comment', userId: user?.uid || 'user-admin', title: 'Comentario no seu post', message: `${names.residentName} comentou na sua publicacao.`, isRead: false, createdAt: now, type: 'post_comment', entityType: 'post', entityId: 'post-welcome' },
     ],
+    notificationReads: {},
     posts: [
       { id: 'post-welcome', authorId: 'user-admin', content: `${names.adminPet} brincando no Pet Place com @${names.linkedPet}`, mediaUrl: '/e2e/post-photo.svg', mediaType: 'image', likedBy: ['user-resident'], commentCount: 2, tags: ['pet-lua'], createdAt: '2026-05-02T20:23:00.000Z' },
     ],
@@ -209,14 +218,49 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
     state.user = null;
     return empty(route);
   }
-  if (method === 'POST' && path === '/payments/ensure-current-month') return empty(route);
+  if (method === 'POST' && path === '/payments/ensure-current-month') {
+    const body = safeJson(request.postData() || '{}', {}) as { familyId?: string };
+    const familyId = body.familyId || (state.user?.familyId || state.user?.uid || '');
+    const supporter = state.supporters.find((item) => item.familyId === familyId);
+    if (supporter?.status === 'active' && !state.payments.some((payment) => payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade')) {
+      state.payments.unshift({
+        id: `payment-${state.payments.length + 1}`,
+        familyId,
+        month: currentMonth,
+        amount: state.config.monthlyAmount,
+        proofUrl: '',
+        status: 'pending',
+        type: 'mensalidade',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return empty(route);
+  }
 
   if (method === 'GET' && path === '/config') return json(route, { config: state.config });
   if (method === 'GET' && path === '/events') return json(route, { events: state.events });
-  if (method === 'GET' && path === '/notifications') return json(route, { notifications: state.notifications });
+  if (method === 'GET' && path === '/notifications') {
+    const targets = state.user?.role === 'admin' ? [state.user.uid, 'all', 'admins'] : [state.user?.uid || '', 'all'];
+    return json(route, {
+      notifications: state.notifications
+        .filter((notification) => targets.includes(notification.userId))
+        .map((notification) => ({
+          ...notification,
+          isRead: notification.userId === 'all' || notification.userId === 'admins'
+            ? (state.notificationReads[notification.id] || []).includes(state.user?.uid || '')
+            : notification.isRead,
+        })),
+    });
+  }
   if (method === 'GET' && path === '/expenses') return json(route, { expenses: state.expenses });
   if (method === 'GET' && path === '/public-profiles') return json(route, { profiles: state.users.filter((user) => user.userStatus !== 'blocked') });
   if (method === 'GET' && path === '/users') return json(route, { users: state.users });
+  if (method === 'GET' && path === '/supporters') {
+    if (url.searchParams.get('all') === '1') return json(route, { supporters: state.supporters });
+    const familyId = url.searchParams.get('familyId') || state.user?.familyId || state.user?.uid || '';
+    return json(route, { supporter: state.supporters.find((item) => item.familyId === familyId) || { familyId, status: 'paused', source: 'self', createdAt: '', updatedAt: '' } });
+  }
   if (method === 'GET' && path === '/identity-link-suggestions') return json(route, { suggestions: state.identityLinkSuggestions });
   if (method === 'GET' && path === '/pets') {
     const ownerId = url.searchParams.get('ownerId');
@@ -250,6 +294,7 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
     };
     state.posts = [post, ...state.posts];
     state.comments[post.id] = [];
+    notifyMentionTargets(state, post.tags || [], post.authorId, post.id);
     return json(route, { id: post.id });
   }
 
@@ -257,20 +302,48 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
   if (method === 'POST' && likeMatch && state.user) {
     const post = state.posts.find((item) => item.id === decodeURIComponent(likeMatch[1]));
     if (post) {
+      const wasLiked = post.likedBy.includes(state.user.uid);
       post.likedBy = post.likedBy.includes(state.user.uid)
         ? post.likedBy.filter((uid) => uid !== state.user?.uid)
         : [...post.likedBy, state.user.uid];
+      if (!wasLiked && post.authorId !== state.user.uid) {
+        state.notifications.unshift({
+          id: `notification-like-${Date.now()}`,
+          userId: post.authorId,
+          title: 'Nova curtida',
+          message: `${state.user.name.split(/\s+/)[0]} curtiu sua publicacao.`,
+          isRead: false,
+          createdAt: now,
+          type: 'post_like',
+          entityType: 'post',
+          entityId: post.id,
+        });
+      }
     }
     return empty(route);
   }
 
   if (method === 'POST' && commentsMatch && state.user) {
     const postId = decodeURIComponent(commentsMatch[1]);
-    const body = safeJson(request.postData() || '{}', {}) as { content?: string };
-    const comment: PostComment = { id: `comment-${Date.now()}`, postId, authorId: state.user.uid, content: body.content || '', createdAt: now };
+    const body = safeJson(request.postData() || '{}', {}) as { content?: string; tags?: string[] };
+    const comment: PostComment = { id: `comment-${Date.now()}`, postId, authorId: state.user.uid, content: body.content || '', tags: body.tags || [], createdAt: now };
     state.comments[postId] = [...(state.comments[postId] || []), comment];
     const post = state.posts.find((item) => item.id === postId);
     if (post) post.commentCount = state.comments[postId].length;
+    const mentioned = notifyMentionTargets(state, comment.tags || [], state.user.uid, postId, comment.id);
+    if (post && post.authorId !== state.user.uid && !mentioned.includes(post.authorId)) {
+      state.notifications.unshift({
+        id: `notification-comment-${Date.now()}`,
+        userId: post.authorId,
+        title: 'Novo comentário',
+        message: `${state.user.name.split(/\s+/)[0]} comentou na sua publicacao.`,
+        isRead: false,
+        createdAt: now,
+        type: 'post_comment',
+        entityType: 'post',
+        entityId: postId,
+      });
+    }
     return empty(route);
   }
 
@@ -283,7 +356,9 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
   const notificationReadMatch = path.match(/^\/notifications\/([^/]+)\/read$/);
   if (method === 'PATCH' && notificationReadMatch) {
     const notification = state.notifications.find((item) => item.id === decodeURIComponent(notificationReadMatch[1]));
-    if (notification) notification.isRead = true;
+    if (notification?.userId === 'all' || notification?.userId === 'admins') {
+      state.notificationReads[notification.id] = Array.from(new Set([...(state.notificationReads[notification.id] || []), state.user?.uid || '']));
+    } else if (notification) notification.isRead = true;
     return empty(route);
   }
 
@@ -321,6 +396,42 @@ async function handleApiRoute(route: Route, state: PetPlaceE2EState) {
     };
     state.users.push(offlineUser);
     return json(route, { user: offlineUser });
+  }
+
+  const supporterPatchMatch = path.match(/^\/supporters\/([^/]+)$/);
+  if (method === 'PATCH' && supporterPatchMatch) {
+    const familyId = decodeURIComponent(supporterPatchMatch[1]);
+    const body = safeJson(request.postData() || '{}', {}) as { status?: SupporterSubscription['status']; cancelCurrentPending?: boolean };
+    const existing = state.supporters.find((item) => item.familyId === familyId);
+    const supporter: SupporterSubscription = {
+      familyId,
+      status: body.status || 'paused',
+      activeSinceMonth: body.status === 'active' ? currentMonth : existing?.activeSinceMonth,
+      pausedAt: body.status === 'paused' ? now : undefined,
+      source: state.user?.role === 'admin' ? 'admin' : 'self',
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    state.supporters = existing
+      ? state.supporters.map((item) => item.familyId === familyId ? supporter : item)
+      : [...state.supporters, supporter];
+    if (body.status === 'paused' && body.cancelCurrentPending) {
+      state.payments = state.payments.filter((payment) => !(payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade' && (payment.status === 'pending' || payment.status === 'rejected')));
+    }
+    if (body.status === 'active' && !state.payments.some((payment) => payment.familyId === familyId && payment.month === currentMonth && payment.type === 'mensalidade')) {
+      state.payments.unshift({
+        id: `payment-${state.payments.length + 1}`,
+        familyId,
+        month: currentMonth,
+        amount: state.config.monthlyAmount,
+        proofUrl: '',
+        status: 'pending',
+        type: 'mensalidade',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return json(route, { supporter });
   }
 
   if (method === 'POST' && path === '/payments/manual') {
@@ -381,6 +492,46 @@ function safeJson<T>(value: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function notifyMentionTargets(state: PetPlaceE2EState, tags: string[], actorId: string, postId: string, commentId?: string) {
+  const mentioned = resolveMentionTargets(state, tags, actorId);
+  const actor = state.users.find((user) => user.uid === actorId);
+  mentioned.forEach((userId) => {
+    state.notifications.unshift({
+      id: `notification-mention-${Date.now()}-${userId}`,
+      userId,
+      title: 'Nova menção',
+      message: `${actor?.name.split(/\s+/)[0] || 'Alguém'} marcou você ou seu pet ${commentId ? 'em um comentário' : 'em uma publicação'}.`,
+      isRead: false,
+      createdAt: now,
+      type: 'mention',
+      entityType: commentId ? 'comment' : 'post',
+      entityId: commentId || postId,
+      data: { postId, ...(commentId ? { commentId } : {}) },
+    });
+  });
+  return mentioned;
+}
+
+function resolveMentionTargets(state: PetPlaceE2EState, tags: string[], actorId: string) {
+  const targets = new Set<string>();
+  [...new Set(tags)].slice(0, 10).forEach((tag) => {
+    const profile = state.users.find((user) => user.uid === tag && user.userStatus !== 'blocked');
+    if (profile) {
+      targets.add(profile.uid);
+      return;
+    }
+    const pet = state.pets.find((item) => item.id === tag);
+    if (!pet) return;
+    const owner = state.users.find((user) => user.uid === pet.ownerId);
+    const familyId = owner?.familyId || owner?.uid;
+    state.users
+      .filter((user) => user.userStatus !== 'blocked' && (user.familyId || user.uid) === familyId)
+      .forEach((user) => targets.add(user.uid));
+  });
+  targets.delete(actorId);
+  return [...targets];
 }
 
 function escapeXml(value: string) {

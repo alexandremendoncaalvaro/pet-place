@@ -4,17 +4,21 @@ import { ptBR } from 'date-fns/locale';
 import { Heart, MessageCircle, MoreVertical, Trash, Edit2, Send, X, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AppPost, PostComment } from '../lib/types';
-import { resolveMentionNotificationTargets } from '../lib/mentions';
-import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment, addNotification } from '../services/api';
+import { buildMentionEntities, filterMentionEntities, MentionEntity } from '../lib/mentions';
+import { isFamilyActiveSupporter } from '../lib/supporters';
+import { togglePostLike, deletePost, updatePost, subscribeToComments, addComment, deleteComment } from '../services/api';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { useFeedback } from './Feedback';
 import { Button, Card, IconButton, TextInput } from './ui';
+import { SupporterBadge } from './SupporterBadge';
 
-export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
-  const { user, publicProfiles, allPets, isAdmin, setViewProfileId, setViewPetId, setFullscreenImage } = useApp();
+export const PostItem: React.FC<{ post: AppPost; autoOpenComments?: boolean; focusToken?: number; highlighted?: boolean }> = ({ post, autoOpenComments = false, focusToken = 0, highlighted = false }) => {
+  const { user, publicProfiles, allPets, allSupporters, isAdmin, setViewProfileId, setViewPetId, setFullscreenImage } = useApp();
   const { toast } = useFeedback();
   const author = publicProfiles.find(p => p.uid === post.authorId);
+  const isAuthorSupporter = isFamilyActiveSupporter(allSupporters, author?.familyId || author?.uid);
   const isLiked = user ? post.likedBy?.includes(user.uid) : false;
+  const mentionEntities = React.useMemo(() => buildMentionEntities(publicProfiles, allPets, user?.uid), [publicProfiles, allPets, user?.uid]);
   
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -30,12 +34,25 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [commentTags, setCommentTags] = useState<string[]>([]);
+  const [commentMentionQuery, setCommentMentionQuery] = useState<string | null>(null);
+  const [commentMentionStart, setCommentMentionStart] = useState<number | null>(null);
+  const [activeCommentMentionIndex, setActiveCommentMentionIndex] = useState(0);
   const [showLikes, setShowLikes] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | undefined>(post.mediaType === 'video' ? undefined : post.mediaUrl);
   const [isPreparingVideo, setIsPreparingVideo] = useState(post.mediaType === 'video' && !!post.mediaUrl);
   const videoBlobUrlRef = useRef<string | null>(null);
+  const commentInputRef = useRef<HTMLInputElement>(null);
   const visibleCommentCount = showComments && commentsLoaded ? comments.length : post.commentCount || 0;
+  const commentMentionSuggestions = React.useMemo(
+    () => commentMentionQuery === null ? [] : filterMentionEntities(mentionEntities, commentMentionQuery, commentTags, 6),
+    [mentionEntities, commentMentionQuery, commentTags],
+  );
+
+  useEffect(() => {
+    setActiveCommentMentionIndex(0);
+  }, [commentMentionQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +100,10 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     }
   }, [showComments, post.id]);
 
+  useEffect(() => {
+    if (autoOpenComments) setShowComments(true);
+  }, [autoOpenComments, focusToken]);
+
   const handleDelete = async () => {
     try {
       setIsPerformingDelete(true);
@@ -97,20 +118,6 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
     if (!editContent.trim()) return;
     setIsSavingEdit(true);
     await updatePost(post.id, editContent, editTags);
-    
-    // Check if new tags were added
-    const newTags = editTags.filter(t => !(post.tags || []).includes(t));
-    if (newTags.length > 0 && user) {
-      const targetUids = resolveMentionNotificationTargets(newTags, user.uid, publicProfiles, allPets);
-      targetUids.forEach(uid => {
-        addNotification({
-          userId: uid,
-          title: 'Nova Menção!',
-          message: `${user.name} marcou você ou seu pet na alteração de uma publicação.`,
-        }).catch(e => console.error(e));
-      });
-    }
-    
     setIsSavingEdit(false);
     setIsEditing(false);
     setShowEditTagsSelector(false);
@@ -121,8 +128,72 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || !user) return;
-    await addComment(post.id, user.uid, newComment);
+    await addComment(post.id, user.uid, newComment, commentTags);
     setNewComment('');
+    setCommentTags([]);
+    setCommentMentionQuery(null);
+    setCommentMentionStart(null);
+  };
+
+  const syncCommentMentionQuery = (value: string, cursor: number) => {
+    const beforeCursor = value.slice(0, cursor);
+    const match = beforeCursor.match(/(^|\s)@([\p{L}\p{N}._-]{0,32})$/u);
+    if (!match) {
+      setCommentMentionQuery(null);
+      setCommentMentionStart(null);
+      return;
+    }
+    setCommentMentionQuery(match[2]);
+    setCommentMentionStart(cursor - match[2].length - 1);
+  };
+
+  const handleCommentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    setNewComment(nextValue);
+    syncCommentMentionQuery(nextValue, event.target.selectionStart || nextValue.length);
+  };
+
+  const handleCommentKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (commentMentionQuery === null) return;
+    if (event.key === 'Escape') {
+      setCommentMentionQuery(null);
+      setCommentMentionStart(null);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveCommentMentionIndex((current) => Math.min(current + 1, Math.max(commentMentionSuggestions.length - 1, 0)));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveCommentMentionIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+    if ((event.key === 'Enter' || event.key === 'Tab') && commentMentionSuggestions[activeCommentMentionIndex]) {
+      event.preventDefault();
+      applyCommentMention(commentMentionSuggestions[activeCommentMentionIndex]);
+    }
+  };
+
+  const applyCommentMention = (entity: MentionEntity) => {
+    const cursor = commentInputRef.current?.selectionStart ?? newComment.length;
+    const start = commentMentionStart ?? cursor;
+    const beforeMention = newComment.slice(0, start);
+    const afterMention = newComment.slice(cursor);
+    const mentionLabel = `@${entity.name}`;
+    const nextValue = `${beforeMention}${mentionLabel} ${afterMention.replace(/^\s*/, '')}`;
+    const nextCursor = beforeMention.length + mentionLabel.length + 1;
+
+    setNewComment(nextValue);
+    setCommentTags((current) => current.includes(entity.id) ? current : [...current, entity.id].slice(0, 10));
+    setCommentMentionQuery(null);
+    setCommentMentionStart(null);
+
+    window.setTimeout(() => {
+      commentInputRef.current?.focus();
+      commentInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -137,13 +208,16 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   };
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={`overflow-hidden transition-shadow ${highlighted ? 'ring-2 ring-brand-500/30 shadow-lg shadow-brand-600/10' : ''}`}>
       <div className="p-4 flex items-center gap-3 relative">
         <button className="flex-shrink-0 relative outline-none focus:ring-2 focus:ring-brand-500 rounded-full hover:opacity-90 active:scale-95 transition-all" onClick={() => author && setViewProfileId(author.uid)}>
           <ImageWithSkeleton src={author?.photoUrl || `https://ui-avatars.com/api/?name=${author?.name || 'User'}&background=random`} alt={author?.name} className="w-10 h-10 rounded-full object-cover" containerClassName="w-10 h-10 rounded-full" />
         </button>
         <div className="flex-1 cursor-pointer" onClick={() => author && setViewProfileId(author.uid)}>
-          <h3 className="text-sm font-semibold text-ink-900 hover:text-brand-600 transition-colors">{author?.name || 'Participante'}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-semibold text-ink-900 hover:text-brand-600 transition-colors">{author?.name || 'Participante'}</h3>
+            {isAuthorSupporter && <SupporterBadge compact />}
+          </div>
           <p className="text-xs text-ink-400">{format(parseISO(post.createdAt), 'dd MMM HH:mm', { locale: ptBR })}</p>
         </div>
         {(user?.uid === post.authorId || isAdmin) && (
@@ -369,6 +443,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
             <div className="space-y-3 mb-3">
               {comments.map(comment => {
                 const cAuthor = publicProfiles.find(p => p.uid === comment.authorId);
+                const isCommentAuthorSupporter = isFamilyActiveSupporter(allSupporters, cAuthor?.familyId || cAuthor?.uid);
                 return (
                   <div key={comment.id} className="flex gap-2 group">
                     <button className="flex-shrink-0" onClick={() => cAuthor && setViewProfileId(cAuthor.uid)}>
@@ -376,7 +451,10 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
                     </button>
                     <div className="flex-1 bg-ink-50 px-3 py-2 rounded-2xl rounded-tl-none">
                       <div className="flex justify-between items-center mb-0.5">
-                        <button className="text-xs font-semibold text-ink-900 hover:underline" onClick={() => cAuthor && setViewProfileId(cAuthor.uid)}>{cAuthor?.name}</button>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <button className="truncate text-xs font-semibold text-ink-900 hover:underline" onClick={() => cAuthor && setViewProfileId(cAuthor.uid)}>{cAuthor?.name}</button>
+                          {isCommentAuthorSupporter && <SupporterBadge compact className="h-4 w-4" />}
+                        </div>
                         {(user?.uid === comment.authorId || user?.uid === post.authorId || isAdmin) && (
                           <button disabled={isDeletingComment === comment.id} onClick={() => handleDeleteComment(comment.id)} className="text-ink-400 hover:text-danger-600 disabled:opacity-50">
                             {isDeletingComment === comment.id ? <span className="text-[10px]">...</span> : <X size={12} />}
@@ -384,6 +462,9 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
                         )}
                       </div>
                       <p className="text-xs text-ink-700">{comment.content}</p>
+                      {comment.tags && comment.tags.length > 0 && (
+                        <MentionTagList tags={comment.tags} mentionEntities={mentionEntities} onProfile={setViewProfileId} onPet={setViewPetId} className="mt-1.5" />
+                      )}
                     </div>
                   </div>
                 )
@@ -392,10 +473,35 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
             </div>
             
             <form onSubmit={handleAddComment} className="flex gap-2 relative">
+              {commentMentionQuery !== null && (
+                <div className="absolute bottom-12 left-0 z-20 w-[260px] max-w-[calc(100vw-3rem)] overflow-hidden rounded-card border border-ink-100 bg-white shadow-xl">
+                  {commentMentionSuggestions.length > 0 ? commentMentionSuggestions.map((entity, index) => (
+                    <button
+                      key={`${entity.kind}:${entity.id}`}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyCommentMention(entity)}
+                      className={`flex w-full items-center gap-3 px-3 py-2 text-left ${index === activeCommentMentionIndex ? 'bg-brand-50' : 'hover:bg-ink-50 active:bg-ink-100'}`}
+                    >
+                      <MentionAvatar entity={entity} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-ink-900">{entity.name}</span>
+                        <span className="block text-xs text-ink-400">{entity.kind === 'pet' ? `Pet de ${entity.owner?.name || 'participante'}` : 'Pessoa'}</span>
+                      </span>
+                    </button>
+                  )) : (
+                    <div className="px-3 py-2 text-sm font-medium text-ink-400">Nenhuma sugestão</div>
+                  )}
+                </div>
+              )}
               <TextInput
+                ref={commentInputRef}
                 type="text" 
                 value={newComment}
-                onChange={e => setNewComment(e.target.value)}
+                onChange={handleCommentChange}
+                onKeyDown={handleCommentKeyDown}
+                onKeyUp={(event) => syncCommentMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
+                onClick={(event) => syncCommentMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
                 placeholder="Adicionar um comentário..."
                 className="flex-1 text-sm rounded-full pl-4 pr-10 py-2"
               />
@@ -407,6 +513,62 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
         )}
       </div>
     </Card>
+  );
+}
+
+function MentionAvatar({ entity }: { entity: MentionEntity }) {
+  const imageUrl = entity.kind === 'profile' ? entity.profile.photoUrl : entity.pet.photoUrl;
+  const fallback = entity.name.charAt(0).toUpperCase();
+
+  if (imageUrl) {
+    return (
+      <ImageWithSkeleton
+        src={imageUrl}
+        alt={entity.name}
+        className="h-8 w-8 rounded-full object-cover"
+        containerClassName="h-8 w-8 shrink-0 rounded-full"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-bold text-ink-500">
+      {fallback}
+    </span>
+  );
+}
+
+function MentionTagList({
+  tags,
+  mentionEntities,
+  onProfile,
+  onPet,
+  className = '',
+}: {
+  tags: string[];
+  mentionEntities: MentionEntity[];
+  onProfile: (id: string | null) => void;
+  onPet: (id: string | null) => void;
+  className?: string;
+}) {
+  const entities = tags
+    .map((tagId) => mentionEntities.find((entity) => entity.id === tagId))
+    .filter((entity): entity is MentionEntity => !!entity);
+  if (!entities.length) return null;
+
+  return (
+    <div className={`flex flex-wrap gap-1 ${className}`}>
+      {entities.map((entity) => (
+        <button
+          key={`${entity.kind}:${entity.id}`}
+          type="button"
+          onClick={() => entity.kind === 'profile' ? onProfile(entity.id) : onPet(entity.id)}
+          className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 hover:bg-brand-100"
+        >
+          @{entity.name}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -428,7 +590,6 @@ async function prepareAuthenticatedVideo(mediaUrl: string): Promise<{ blobUrl?: 
       return {};
     }
     const blob = await response.blob();
-    console.info('Video fetch succeeded', { mediaUrl, ...headers, blobType: blob.type, blobSize: blob.size });
     return { blobUrl: URL.createObjectURL(blob) };
   } catch (error) {
     console.error('Video fetch crashed', { mediaUrl, error });

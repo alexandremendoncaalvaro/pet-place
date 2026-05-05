@@ -10,15 +10,17 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Tutor Azul/ })).toBeVisible();
 });
 
-test('01 - home mostra mensalidade vigente e feed inicial', async ({ page }) => {
-  await expect(page.getByText(/Mensalidade:/)).toBeVisible();
-  await expect(page.getByText(/Em dia/)).toBeVisible();
+test('01 - home oculta mensalidade quitada e mostra feed inicial', async ({ page }) => {
+  await expect(page.getByText(/Mensalidade:/)).not.toBeVisible();
+  await expect(page.getByText(/Em dia/)).not.toBeVisible();
   await expect(page.getByText(/Pet Sol brincando/)).toBeVisible();
   await expectImageLoaded(page.getByAltText('Post media').first());
   await expect(page.getByRole('button', { name: 'Comentários da publicação' })).toContainText('2');
 });
 
 test('02 - detalhes da mensalidade exibem historico e comprovante em tela cheia', async ({ page }) => {
+  state.payments = state.payments.map((payment) => payment.id === 'payment-admin-may' ? { ...payment, status: 'analyzing' } : payment);
+  await page.reload();
   await page.getByRole('button', { name: /Detalhes/ }).click();
   await expect(page.getByText(/Meus Pagamentos/)).toBeVisible();
   await expect(page.getByText(/Historico|Histórico/)).toBeVisible();
@@ -39,16 +41,21 @@ test('03 - extrato mostra entradas, saidas e historico do caixa', async ({ page 
 
 test('04 - mural lista notificacoes e eventos importantes', async ({ page }) => {
   await page.getByText('Mural').click();
-  await expect(page.getByText(/Minhas Notifica/)).toBeVisible();
+  await expect(page.getByText('Notificações')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Todas' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Social' })).toBeVisible();
   await expect(page.getByText(/Comentario no seu post|Comentário no seu post/)).toBeVisible();
   await expect(page.getByText(/Eventos e Avisos/)).toBeVisible();
   await expect(page.getByText(/Mutirao de limpeza|Mutirão de limpeza/)).toBeVisible();
+  await page.getByText(/Comentario no seu post|Comentário no seu post/).click();
+  await expect(page.getByText(/Pet Sol brincando/)).toBeVisible();
 });
 
 test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
   await page.getByText('Comunidade').click();
   await page.getByPlaceholder('Buscar...').fill('Tutor Laranja');
   await expect(page.getByText('Tutor Laranja')).toBeVisible();
+  await expect(page.getByText('Apoiador').first()).toBeVisible();
   await page.getByPlaceholder('Buscar...').fill('Pet Lua');
   await expect(page.getByText('Pet Lua')).toBeVisible();
   await expectImageLoaded(page.getByAltText('Pet Lua').first());
@@ -89,7 +96,19 @@ test('09 - comentario aparece na thread da publicacao', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Comentários da publicação' }).first()).toContainText('3');
 });
 
-test('10 - admin registra pagamento externo com comprovante', async ({ page }) => {
+test('10 - comentario aceita mencao com arroba e notifica tutor do pet', async ({ page }) => {
+  await page.getByRole('button', { name: 'Comentários da publicação' }).first().click();
+  await page.getByPlaceholder(/Adicionar um coment/).fill('Oi @Pet');
+  const petSuggestion = page.getByRole('button').filter({ hasText: 'Pet Lua' }).filter({ hasText: 'Pet de Tutor Laranja' });
+  await expect(petSuggestion).toBeVisible();
+  await petSuggestion.click();
+  await page.getByPlaceholder(/Adicionar um coment/).fill('Oi @Pet Lua no comentário');
+  await page.getByRole('button', { name: /Enviar comentario|Enviar comentário/ }).click();
+  await expect(page.getByText('Oi @Pet Lua no comentário')).toBeVisible();
+  expect(state.notifications.some((notification) => notification.userId === 'user-linked' && notification.type === 'mention')).toBe(true);
+});
+
+test('11 - admin registra pagamento externo com comprovante', async ({ page }) => {
   await page.getByRole('button', { name: 'Admin' }).click();
   await page.getByRole('button', { name: /Pessoas/ }).click();
   await page.getByRole('button', { name: /Pagamento externo/ }).click();
@@ -106,4 +125,39 @@ test('10 - admin registra pagamento externo com comprovante', async ({ page }) =
   await page.getByRole('button', { name: /Registrar no caixa/ }).click();
   await expect(page.getByText(/Pessoa e comprovante registrados/)).toBeVisible();
   expect(state.payments.some((payment) => payment.familyId.startsWith('offline-') && payment.amount === 25)).toBe(true);
+});
+
+test('12 - nova familia nao apoiadora ve convite e nao recebe mensalidade automatica', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
+  state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
+  await page.reload();
+  await expect(page.getByText(/Seja um apoiador recorrente|Ajude a manter o PetPlace/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ocultar convite/ })).not.toBeVisible();
+  await expect(page.getByText(/Mensalidade:/)).not.toBeVisible();
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade')).toBe(false);
+});
+
+test('13 - perfil permite virar apoiador recorrente e cria mensalidade', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.supporters = state.supporters.filter((supporter) => supporter.familyId !== 'family-resident');
+  state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
+  await page.reload();
+  await page.getByRole('button', { name: /Virar apoiador/ }).first().click();
+  await page.getByRole('button', { name: /Virar apoiador recorrente/ }).click();
+  await expect(page.getByText(/Você agora é apoiador recorrente/)).toBeVisible();
+  expect(state.supporters.some((supporter) => supporter.familyId === 'family-resident' && supporter.status === 'active')).toBe(true);
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade' && payment.status === 'pending')).toBe(true);
+});
+
+test('14 - pausar apoio pode cancelar mensalidade pendente do mes', async ({ page }) => {
+  state.user = state.users.find((user) => user.uid === 'user-resident') || state.user;
+  state.payments = state.payments.map((payment) => payment.id === 'payment-resident-may' ? { ...payment, status: 'pending', proofUrl: '' } : payment);
+  await page.reload();
+  await page.getByRole('button', { name: 'Meu Perfil' }).click();
+  await page.getByRole('button', { name: /Pausar apoio recorrente/ }).click();
+  await page.getByRole('button', { name: /Cancelar pendência/ }).click();
+  await expect(page.getByText(/pendência do mês cancelada/)).toBeVisible();
+  expect(state.supporters.find((supporter) => supporter.familyId === 'family-resident')?.status).toBe('paused');
+  expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.month === '2026-05' && payment.status === 'pending')).toBe(false);
 });

@@ -1,4 +1,4 @@
-import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, UserProfile } from '../lib/types';
+import { AppConfig, AppEvent, AppNotification, AppPost, Expense, IdentityLinkSuggestion, Payment, PaymentStatus, Pet, PostComment, Role, SupporterSubscription, UserProfile } from '../lib/types';
 import { API_BASE, api, toApiError } from './http';
 import { notifyDataChanged, subscribe } from './subscriptions';
 import { classifyUploadMedia, compressImage, createVideoPoster, normalizeUploadFile } from './uploads';
@@ -56,6 +56,14 @@ export function subscribeToMyPayments(familyId: string, callback: (payments: Pay
 
 export function subscribeToAllPayments(callback: (payments: Payment[]) => void) {
   return subscribe(async () => (await api<{ payments: Payment[] }>('/payments?all=1')).payments, callback, 120000, ['payments']);
+}
+
+export function subscribeToMySupporter(familyId: string, callback: (supporter: SupporterSubscription | null) => void) {
+  return subscribe(async () => (await api<{ supporter: SupporterSubscription }>(`/supporters?familyId=${encodeURIComponent(familyId)}`)).supporter, callback, 120000, ['supporters']);
+}
+
+export function subscribeToAllSupporters(callback: (supporters: SupporterSubscription[]) => void) {
+  return subscribe(async () => (await api<{ supporters: SupporterSubscription[] }>('/supporters?all=1')).supporters, callback, 120000, ['supporters']);
 }
 
 export function subscribeToAllExpenses(callback: (expenses: Expense[]) => void) {
@@ -151,6 +159,15 @@ export async function deletePayment(paymentId: string) {
   notifyDataChanged('payments');
 }
 
+export async function updateSupporterStatus(familyId: string, status: SupporterSubscription['status'], options: { cancelCurrentPending?: boolean } = {}) {
+  await api(`/supporters/${encodeURIComponent(familyId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, cancelCurrentPending: !!options.cancelCurrentPending }),
+  });
+  notifyDataChanged('supporters');
+  notifyDataChanged('payments');
+}
+
 export async function createCharges(charges: Omit<Payment, 'id' | 'createdAt' | 'updatedAt' | 'proofUrl'>[]) {
   await api('/payments/charges', {
     method: 'POST',
@@ -232,8 +249,19 @@ export async function markEventAsRead(eventId: string, _userId: string) {
   notifyDataChanged('events');
 }
 
+export type NotificationFilter = 'all' | 'unread' | 'social' | 'payments' | 'admin';
+
+export async function fetchNotifications({ limit = 100, offset = 0, filter = 'all' }: { limit?: number; offset?: number; filter?: NotificationFilter } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    filter,
+  });
+  return (await api<{ notifications: AppNotification[] }>(`/notifications?${params.toString()}`)).notifications;
+}
+
 export function subscribeToMyNotifications(_userId: string, _role: string, callback: (n: AppNotification[]) => void) {
-  return subscribe(async () => (await api<{ notifications: AppNotification[] }>('/notifications')).notifications, callback, 120000, ['notifications']);
+  return subscribe(async () => fetchNotifications({ limit: 200 }), callback, 120000, ['notifications']);
 }
 
 export async function markNotificationAsRead(notificationId: string) {
@@ -287,10 +315,10 @@ export function subscribeToComments(postId: string, callback: (comments: PostCom
   return subscribe(async () => (await api<{ comments: PostComment[] }>(`/posts/${encodeURIComponent(postId)}/comments`)).comments, callback, 120000, [`comments:${postId}`]);
 }
 
-export async function addComment(postId: string, authorId: string, content: string) {
+export async function addComment(postId: string, authorId: string, content: string, tags: string[] = []) {
   await api(`/posts/${encodeURIComponent(postId)}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ authorId, content }),
+    body: JSON.stringify({ authorId, content, tags }),
   });
   notifyDataChanged(`comments:${postId}`);
   notifyDataChanged('posts');

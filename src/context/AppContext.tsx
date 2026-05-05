@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
-import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost, IdentityLinkSuggestion } from '../lib/types';
+import { UserProfile, Payment, Expense, AppConfig, Pet, AppEvent, AppNotification, AppPost, IdentityLinkSuggestion, SupporterSubscription } from '../lib/types';
+import { isSupporterActiveForMonth } from '../lib/supporters';
 import { 
   initBackend, 
   subscribeToAuth, 
@@ -8,6 +9,8 @@ import {
   ensureCurrentMonthPayment,
   subscribeToMyPayments,
   subscribeToAllPayments,
+  subscribeToMySupporter,
+  subscribeToAllSupporters,
   subscribeToAllExpenses,
   subscribeToAllUsers,
   subscribeToAllPublicProfiles,
@@ -29,6 +32,8 @@ interface AppState {
   loading: boolean;
   myPayments: Payment[];
   allPayments: Payment[];
+  mySupporter: SupporterSubscription | null;
+  allSupporters: SupporterSubscription[];
   allExpenses: Expense[];
   allUsers: UserProfile[];
   publicProfiles: UserProfile[];
@@ -61,6 +66,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [backendReady, setBackendReady] = useState(false);
   const [myPayments, setMyPayments] = useState<Payment[]>([]);
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [mySupporter, setMySupporter] = useState<SupporterSubscription | null>(null);
+  const [allSupporters, setAllSupporters] = useState<SupporterSubscription[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [publicProfiles, setPublicProfiles] = useState<UserProfile[]>([]);
@@ -118,6 +125,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!backendReady || !user) {
       setMyPayments([]);
       setAllPayments([]);
+      setMySupporter(null);
+      setAllSupporters([]);
       setAllExpenses([]);
       setAllUsers([]);
       setPublicProfiles([]);
@@ -134,6 +143,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       subscribeToConfig(setAppConfig),
       subscribeToAllEvents(setEvents),
       subscribeToMyPayments(familyId, setMyPayments),
+      subscribeToMySupporter(familyId, setMySupporter),
+      subscribeToAllSupporters(setAllSupporters),
       subscribeToMyNotifications(user.uid, user.role, setMyNotifications),
       subscribeToAllExpenses(setAllExpenses),
       subscribeToAllPublicProfiles(setPublicProfiles),
@@ -146,13 +157,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubs.push(subscribeToIdentityLinkSuggestions(setIdentityLinkSuggestions));
     }
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const ensureKey = `${familyId}:${currentMonth}`;
-    if (!ensuredPaymentsRef.current.has(ensureKey)) {
-      ensuredPaymentsRef.current.add(ensureKey);
-      ensureCurrentMonthPayment(familyId).catch((error) => console.error('Failed to ensure current payment:', error));
-    }
-
     if (!pushRequestedRef.current.has(user.uid)) {
       pushRequestedRef.current.add(user.uid);
       requestPushToken(user.uid).catch((error) => console.error('Failed to register push subscription:', error));
@@ -162,6 +166,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubs.forEach((unsubscribe) => unsubscribe());
     };
   }, [backendReady, user?.uid, user?.familyId, user?.role]);
+
+  useEffect(() => {
+    if (!backendReady || !user) return;
+    const familyId = user.familyId || user.uid;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    if (!isSupporterActiveForMonth(mySupporter, currentMonth)) return;
+    const ensureKey = `${familyId}:${currentMonth}`;
+    if (!ensuredPaymentsRef.current.has(ensureKey)) {
+      ensuredPaymentsRef.current.add(ensureKey);
+      ensureCurrentMonthPayment(familyId).catch((error) => console.error('Failed to ensure current payment:', error));
+    }
+  }, [backendReady, user?.uid, user?.familyId, mySupporter?.status, mySupporter?.activeSinceMonth]);
 
   useEffect(() => {
     if (!backendReady || !user) return;
@@ -196,6 +212,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loading,
       myPayments,
       allPayments,
+      mySupporter,
+      allSupporters,
       allExpenses,
       allUsers,
       publicProfiles,

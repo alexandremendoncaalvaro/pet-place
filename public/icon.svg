@@ -1,9 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pet Place">
-  <rect width="128" height="128" rx="28" fill="#2563eb"/>
-  <circle cx="42" cy="46" r="12" fill="#fff"/>
-  <circle cx="64" cy="36" r="12" fill="#fff"/>
-  <circle cx="86" cy="46" r="12" fill="#fff"/>
-  <circle cx="50" cy="72" r="12" fill="#fff"/>
-  <circle cx="78" cy="72" r="12" fill="#fff"/>
-  <path d="M42 83c0-17 44-17 44 0 0 13-10 22-22 22S42 96 42 83Z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="PetPlace">
+  <defs>
+    <linearGradient id="app-icon-bg" x1="14" x2="114" y1="13" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset=".48" stop-color="#f97316"/>
+      <stop offset="1" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" fill="url(#app-icon-bg)"/>
+  <path d="M24 50c0-9.4 7.6-17 17-17h14.5c3.3 0 6.4-1.8 8-4.8l3-5.4c2.1-3.6 5.9-5.8 10-5.8h15c4.1 0 7.9 2.2 10 5.8l3 5.4c1.6 3 4.7 4.8 8 4.8H87c9.4 0 17 7.6 17 17v39c0 9.4-7.6 17-17 17H41c-9.4 0-17-7.6-17-17V50Z" fill="none" stroke="#fff" stroke-width="9" stroke-linejoin="round"/>
+  <circle cx="90" cy="50" r="6" fill="#31d2c7"/>
+  <circle cx="64" cy="68" r="27" fill="none" stroke="#fff" stroke-width="8"/>
+  <path fill="#fff" d="M50 75c0-7.5 6.5-13.1 14-13.1S78 67.5 78 75c0 7-5.9 12.5-14 12.5S50 82 50 75Z"/>
+  <circle cx="49" cy="62" r="5.2" fill="#fff"/>
+  <circle cx="59" cy="56.5" r="5.5" fill="#fff"/>
+  <circle cx="69" cy="56.5" r="5.5" fill="#fff"/>
+  <circle cx="79" cy="62" r="5.2" fill="#fff"/>
 </svg>

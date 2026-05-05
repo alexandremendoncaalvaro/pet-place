@@ -13,6 +13,16 @@ export function commentNotification({ actorName }: InteractionNotificationInput)
   };
 }
 
+export function mentionNotification({ actorName, context }: InteractionNotificationInput & { context: 'post' | 'comment' }) {
+  return {
+    type: 'mention' as const,
+    title: 'Nova menção',
+    message: context === 'comment'
+      ? `${firstName(actorName)} marcou você ou seu pet em um comentário.`
+      : `${firstName(actorName)} marcou você ou seu pet em uma publicação.`,
+  };
+}
+
 export function likeNotification({ actorName, count = 1 }: InteractionNotificationInput) {
   if (count <= 1) {
     return {
@@ -26,6 +36,22 @@ export function likeNotification({ actorName, count = 1 }: InteractionNotificati
     type: 'post_like' as const,
     title: 'Curtidas na sua publicação',
     message: `${count} pessoas curtiram sua publicação.`,
+  };
+}
+
+export function paymentStatusNotification(status: 'approved' | 'rejected') {
+  if (status === 'approved') {
+    return {
+      type: 'payment' as const,
+      title: 'Pagamento aprovado',
+      message: 'Seu comprovante foi aprovado. Obrigado por ajudar a manter o PetPlace.',
+    };
+  }
+
+  return {
+    type: 'payment' as const,
+    title: 'Comprovante recusado',
+    message: 'Seu comprovante precisa de revisão. Confira os detalhes do pagamento.',
   };
 }
 
