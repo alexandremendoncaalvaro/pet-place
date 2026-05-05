@@ -4,9 +4,11 @@ import { Info, PawPrint, Search, User } from 'lucide-react';
 import { ImageWithSkeleton } from './ImageWithSkeleton';
 import { AboutModal } from './AboutModal';
 import { Badge, Button, Card, EmptyState, Page, SectionTitle, TextInput } from './ui';
+import { SupporterBadge } from './SupporterBadge';
+import { isFamilyActiveSupporter } from '../lib/supporters';
 
 export function DirectoryView() {
-  const { publicProfiles, allPets, setViewProfileId, setViewPetId } = useApp();
+  const { publicProfiles, allPets, allSupporters, setViewProfileId, setViewPetId } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'people' | 'pets'>('all');
   const [showAbout, setShowAbout] = useState(false);
@@ -106,6 +108,8 @@ export function DirectoryView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredProfiles.map(profile => {
                 const familyPets = getFamilyPets(profile.uid);
+                const familyId = profile.familyId || profile.uid;
+                const isSupporter = isFamilyActiveSupporter(allSupporters, familyId);
                 return (
                 <Card
                   key={profile.uid}
@@ -122,10 +126,13 @@ export function DirectoryView() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-ink-900 truncate">{profile.name}</h4>
-                    {profile.role === 'admin' && (
-                      <Badge tone="brand" className="rounded-md mt-1 px-2 py-0.5 capitalize">{profile.role}</Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h4 className="font-semibold text-ink-900 truncate">{profile.name}</h4>
+                      {isSupporter && <SupporterBadge />}
+                      {profile.role === 'admin' && (
+                        <Badge tone="brand" className="rounded-md px-2 py-0.5 capitalize">{profile.role}</Badge>
+                      )}
+                    </div>
                     {familyPets.length > 0 && (
                       <div className="mt-2 flex items-center gap-2">
                         <div className="text-xs text-ink-500 flex items-center bg-ink-50 rounded-lg px-2 py-1 w-max border border-ink-200">
@@ -153,6 +160,8 @@ export function DirectoryView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredPets.map(pet => {
                 const responsiblePeople = getFamilyMembers(pet.ownerId);
+                const owner = publicProfiles.find(profile => profile.uid === pet.ownerId);
+                const isSupporter = isFamilyActiveSupporter(allSupporters, owner?.familyId || owner?.uid);
                 return (
                   <Card
                     key={pet.id}
@@ -169,7 +178,10 @@ export function DirectoryView() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-ink-900 truncate">{pet.name}</h4>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h4 className="font-semibold text-ink-900 truncate">{pet.name}</h4>
+                        {isSupporter && <SupporterBadge />}
+                      </div>
                       {pet.breed && <p className="text-xs text-warning-600 font-medium mt-1">{pet.breed}</p>}
                       {responsiblePeople.length > 0 && (
                         <div className="mt-2 text-xs text-ink-500 flex items-center bg-ink-50 rounded-lg px-2 py-1 w-max border border-ink-200">

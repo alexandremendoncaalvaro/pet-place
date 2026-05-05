@@ -12,6 +12,8 @@ Este diretório é a fonte principal de documentação técnica e operacional do
 - [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md): tokens, primitives e regras visuais.
 - [MEDIA_POLICY.md](MEDIA_POLICY.md): regras para imagens, vídeos, comprovantes e recibos.
 - [IDENTITY_LINKING.md](IDENTITY_LINKING.md): pré-cadastro offline e junção por telefone.
+- [NOTIFICATION_POLICY.md](NOTIFICATION_POLICY.md): matriz de notificações por perfil e motivo.
+- [SUPPORTER_RECOGNITION.md](SUPPORTER_RECOGNITION.md): reconhecimento, badges e ideias de benefícios para apoiadores.
 - [RELEASE_PROCESS.md](RELEASE_PROCESS.md): fluxo de branches, RCs e releases.
 - [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md): auditoria sênior atual e plano de maturidade.
 

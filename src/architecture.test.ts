@@ -80,6 +80,8 @@ describe('project architecture guardrails', () => {
     const createPostModal = read('src/components/CreatePostModal.tsx');
     const postItem = read('src/components/PostItem.tsx');
     const mentions = read('src/lib/mentions.ts');
+    const worker = read('worker/index.ts');
+    const migration = read('migrations/0009_comment_mentions_notification_reads.sql');
 
     expect(createPostModal).toContain('applyMention');
     expect(createPostModal).toContain('mentionSuggestions');
@@ -87,8 +89,12 @@ describe('project architecture guardrails', () => {
     expect(createPostModal).toContain('mentionMenuPosition');
     expect(createPostModal).toContain('onKeyDown={handleContentKeyDown}');
     expect(createPostModal).toContain('style={{ top: mentionMenuPosition.top, left: mentionMenuPosition.left }}');
-    expect(createPostModal).toContain('resolveMentionNotificationTargets(postTags');
-    expect(postItem).toContain('resolveMentionNotificationTargets(newTags');
+    expect(postItem).toContain('applyCommentMention');
+    expect(postItem).toContain('commentMentionSuggestions');
+    expect(worker).toContain('async function resolveMentionTargets');
+    expect(worker).toContain('notifyMentionTargets(env, await resolveMentionTargets');
+    expect(worker).toContain('post_comment_tags');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS post_comment_tags');
     expect(mentions).toContain('const familyId = owner.familyId || owner.uid');
     expect(mentions).toContain('targetUids.delete(actorUid)');
     expect(createPostModal).not.toContain('taggedPet.familyId');
@@ -125,6 +131,19 @@ describe('project architecture guardrails', () => {
     expect(worker).toContain("reason: 'not-supporter'");
     expect(worker).toContain('processMonthlySupporterPayments');
     expect(appContext).toContain('isSupporterActiveForMonth(mySupporter, currentMonth)');
+  });
+
+  it('keeps notifications personal, mention-aware and auditable by reason', () => {
+    const worker = read('worker/index.ts');
+    const policy = read('src/lib/notificationPolicy.ts');
+    const migration = read('migrations/0009_comment_mentions_notification_reads.sql');
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS notification_reads');
+    expect(worker).toContain('LEFT JOIN notification_reads nr');
+    expect(worker).toContain("notification.user_id === 'all'");
+    expect(policy).toContain('mentionNotification');
+    expect(policy).toContain('paymentStatusNotification');
+    expect(worker).toContain('paymentStatusNotification(body.status)');
   });
 
   it('keeps financial media private while preserving the authenticated transparency ledger', () => {

@@ -22,3 +22,8 @@ export function isSupporterActiveForMonth(subscription: SupporterSubscription | 
   if (!subscription || subscription.status !== 'active') return false;
   return !subscription.activeSinceMonth || subscription.activeSinceMonth <= month;
 }
+
+export function isFamilyActiveSupporter(supporters: SupporterSubscription[], familyId: string | undefined, month = monthKey(new Date())): boolean {
+  if (!familyId) return false;
+  return supporters.some((supporter) => supporter.familyId === familyId && isSupporterActiveForMonth(supporter, month));
+}

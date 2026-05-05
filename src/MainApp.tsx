@@ -12,9 +12,11 @@ import { GlobalModals } from './components/GlobalModals';
 import { CreatePostModal } from './components/CreatePostModal';
 import { Plus } from 'lucide-react';
 import { Badge, Button, Card, IconButton } from './components/ui';
+import { SupporterBadge } from './components/SupporterBadge';
+import { isFamilyActiveSupporter } from './lib/supporters';
 
 export function MainApp() {
-  const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications } = useApp();
+  const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications, allSupporters } = useApp();
   const [activeTab, setActiveTab] = useState<'home' | 'mural' | 'transparencia' | 'admin' | 'perfil' | 'directory'>('home');
   const [showCreatePost, setShowCreatePost] = useState(false);
 
@@ -79,6 +81,7 @@ export function MainApp() {
   }
 
   const unreadCount = myNotifications?.filter(n => !n.isRead).length || 0;
+  const isSupporter = isFamilyActiveSupporter(allSupporters, user.familyId || user.uid);
 
   return (
     <div className="flex flex-col min-h-screen bg-ink-50 pb-20">
@@ -97,10 +100,11 @@ export function MainApp() {
             )}
           </button>
           <div className="flex flex-col">
-            <h1 className="font-semibold text-ink-900 leading-tight">Olá, {user.name.split(' ')[0]}</h1>
-            {user.role === 'admin' && (
-              <span className="text-xs text-ink-400">Admin</span>
-            )}
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-semibold text-ink-900 leading-tight">Olá, {user.name.split(' ')[0]}</h1>
+              {isSupporter && <SupporterBadge compact />}
+            </div>
+            {user.role === 'admin' && <span className="text-xs text-ink-400">Admin</span>}
           </div>
         </div>
         <div className="flex items-center gap-1">
