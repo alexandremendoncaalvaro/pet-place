@@ -14,11 +14,19 @@ import { Plus } from 'lucide-react';
 import { Badge, Button, Card, IconButton } from './components/ui';
 import { SupporterBadge } from './components/SupporterBadge';
 import { isFamilyActiveSupporter } from './lib/supporters';
+import { AppNotification } from './lib/types';
+
+interface FeedFocusTarget {
+  postId: string;
+  openComments?: boolean;
+  token: number;
+}
 
 export function MainApp() {
   const { user, login, logout, loading, isRealBackend, toggleMockRole, myNotifications, allSupporters } = useApp();
   const [activeTab, setActiveTab] = useState<'home' | 'mural' | 'transparencia' | 'admin' | 'perfil' | 'directory'>('home');
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [feedFocusTarget, setFeedFocusTarget] = useState<FeedFocusTarget | null>(null);
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-ink-500 animate-pulse text-lg">Carregando Pet Place...</div>;
@@ -83,6 +91,39 @@ export function MainApp() {
   const unreadCount = myNotifications?.filter(n => !n.isRead).length || 0;
   const isSupporter = isFamilyActiveSupporter(allSupporters, user.familyId || user.uid);
 
+  const handleNavigateNotification = (notification: AppNotification) => {
+    const postId = notification.entityType === 'post'
+      ? notification.entityId
+      : typeof notification.data?.postId === 'string'
+        ? notification.data.postId
+        : undefined;
+
+    if (postId) {
+      setFeedFocusTarget({
+        postId,
+        openComments: notification.type === 'post_comment' || notification.entityType === 'comment',
+        token: Date.now(),
+      });
+      setActiveTab('home');
+      return;
+    }
+
+    if (notification.type === 'payment') {
+      setActiveTab(user.role === 'admin' || notification.userId === 'admins' ? 'admin' : 'home');
+      return;
+    }
+
+    if (user.role === 'admin' && notification.userId === 'admins') {
+      setActiveTab('admin');
+      return;
+    }
+
+    if (notification.entityType === 'event' || notification.type === 'event') {
+      setActiveTab('mural');
+      return;
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-ink-50 pb-20">
       {/* Header */}
@@ -130,9 +171,10 @@ export function MainApp() {
           <ResidentDashboard
             onBecomeSupporter={() => setActiveTab('perfil')}
             onOpenTransparency={() => setActiveTab('transparencia')}
+            focusTarget={feedFocusTarget}
           />
         )}
-        {activeTab === 'mural' && <MuralView />}
+        {activeTab === 'mural' && <MuralView onNavigateNotification={handleNavigateNotification} />}
         {activeTab === 'transparencia' && <TransparenciaView />}
         {activeTab === 'directory' && <DirectoryView />}
         {activeTab === 'perfil' && <ProfileView />}

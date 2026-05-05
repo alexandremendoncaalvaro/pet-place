@@ -10,15 +10,17 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Tutor Azul/ })).toBeVisible();
 });
 
-test('01 - home mostra mensalidade vigente e feed inicial', async ({ page }) => {
-  await expect(page.getByText(/Mensalidade:/)).toBeVisible();
-  await expect(page.getByText(/Em dia/)).toBeVisible();
+test('01 - home oculta mensalidade quitada e mostra feed inicial', async ({ page }) => {
+  await expect(page.getByText(/Mensalidade:/)).not.toBeVisible();
+  await expect(page.getByText(/Em dia/)).not.toBeVisible();
   await expect(page.getByText(/Pet Sol brincando/)).toBeVisible();
   await expectImageLoaded(page.getByAltText('Post media').first());
   await expect(page.getByRole('button', { name: 'Comentários da publicação' })).toContainText('2');
 });
 
 test('02 - detalhes da mensalidade exibem historico e comprovante em tela cheia', async ({ page }) => {
+  state.payments = state.payments.map((payment) => payment.id === 'payment-admin-may' ? { ...payment, status: 'analyzing' } : payment);
+  await page.reload();
   await page.getByRole('button', { name: /Detalhes/ }).click();
   await expect(page.getByText(/Meus Pagamentos/)).toBeVisible();
   await expect(page.getByText(/Historico|Histórico/)).toBeVisible();
@@ -39,10 +41,14 @@ test('03 - extrato mostra entradas, saidas e historico do caixa', async ({ page 
 
 test('04 - mural lista notificacoes e eventos importantes', async ({ page }) => {
   await page.getByText('Mural').click();
-  await expect(page.getByText(/Minhas Notifica/)).toBeVisible();
+  await expect(page.getByText('Notificações')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Todas' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Social' })).toBeVisible();
   await expect(page.getByText(/Comentario no seu post|Comentário no seu post/)).toBeVisible();
   await expect(page.getByText(/Eventos e Avisos/)).toBeVisible();
   await expect(page.getByText(/Mutirao de limpeza|Mutirão de limpeza/)).toBeVisible();
+  await page.getByText(/Comentario no seu post|Comentário no seu post/).click();
+  await expect(page.getByText(/Pet Sol brincando/)).toBeVisible();
 });
 
 test('05 - comunidade permite buscar pessoas e pets', async ({ page }) => {
@@ -127,6 +133,7 @@ test('12 - nova familia nao apoiadora ve convite e nao recebe mensalidade automa
   state.payments = state.payments.filter((payment) => payment.familyId !== 'family-resident');
   await page.reload();
   await expect(page.getByText(/Seja um apoiador recorrente|Ajude a manter o PetPlace/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ocultar convite/ })).not.toBeVisible();
   await expect(page.getByText(/Mensalidade:/)).not.toBeVisible();
   expect(state.payments.some((payment) => payment.familyId === 'family-resident' && payment.type === 'mensalidade')).toBe(false);
 });

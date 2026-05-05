@@ -12,7 +12,7 @@ import { useFeedback } from './Feedback';
 import { Button, Card, IconButton, TextInput } from './ui';
 import { SupporterBadge } from './SupporterBadge';
 
-export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
+export const PostItem: React.FC<{ post: AppPost; autoOpenComments?: boolean; focusToken?: number; highlighted?: boolean }> = ({ post, autoOpenComments = false, focusToken = 0, highlighted = false }) => {
   const { user, publicProfiles, allPets, allSupporters, isAdmin, setViewProfileId, setViewPetId, setFullscreenImage } = useApp();
   const { toast } = useFeedback();
   const author = publicProfiles.find(p => p.uid === post.authorId);
@@ -99,6 +99,10 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
       if (unsub) unsub();
     }
   }, [showComments, post.id]);
+
+  useEffect(() => {
+    if (autoOpenComments) setShowComments(true);
+  }, [autoOpenComments, focusToken]);
 
   const handleDelete = async () => {
     try {
@@ -204,7 +208,7 @@ export const PostItem: React.FC<{ post: AppPost }> = ({ post }) => {
   };
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={`overflow-hidden transition-shadow ${highlighted ? 'ring-2 ring-brand-500/30 shadow-lg shadow-brand-600/10' : ''}`}>
       <div className="p-4 flex items-center gap-3 relative">
         <button className="flex-shrink-0 relative outline-none focus:ring-2 focus:ring-brand-500 rounded-full hover:opacity-90 active:scale-95 transition-all" onClick={() => author && setViewProfileId(author.uid)}>
           <ImageWithSkeleton src={author?.photoUrl || `https://ui-avatars.com/api/?name=${author?.name || 'User'}&background=random`} alt={author?.name} className="w-10 h-10 rounded-full object-cover" containerClassName="w-10 h-10 rounded-full" />
@@ -586,7 +590,6 @@ async function prepareAuthenticatedVideo(mediaUrl: string): Promise<{ blobUrl?: 
       return {};
     }
     const blob = await response.blob();
-    console.info('Video fetch succeeded', { mediaUrl, ...headers, blobType: blob.type, blobSize: blob.size });
     return { blobUrl: URL.createObjectURL(blob) };
   } catch (error) {
     console.error('Video fetch crashed', { mediaUrl, error });

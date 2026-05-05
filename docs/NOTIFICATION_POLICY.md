@@ -43,6 +43,8 @@ Recebe todas as notificacoes normais de morador e tambem:
 - `post_comment_tags` guarda mencoes feitas em comentarios.
 - O Worker resolve alvos de mencao e cria notificacoes; o cliente apenas envia os ids selecionados.
 - Curtidas sao agregadas por publicacao quando ha notificacao nao lida.
+- O mural permite filtrar notificacoes por todas, nao lidas, social, pagamentos e admin.
+- Clicar em uma notificacao social leva para a publicacao relacionada; notificacoes administrativas levam para o painel admin; pagamentos levam para o fluxo financeiro correspondente.
 
 ## Lacunas futuras
 

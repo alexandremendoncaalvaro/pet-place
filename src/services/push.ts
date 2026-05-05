@@ -10,12 +10,19 @@ export async function requestPushToken(_userId: string) {
   const { publicKey } = await api<{ publicKey: string }>('/push/vapid-public-key');
   if (!publicKey) return;
 
-  const registration = await navigator.serviceWorker.register('/push-sw.js');
+  await navigator.serviceWorker.register('/push-sw.js');
+  const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
-  const subscription = existing || await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
-  });
+  let subscription: PushSubscription;
+  try {
+    subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  } catch (error) {
+    console.warn('Push subscription unavailable:', error);
+    return;
+  }
   await api('/push-subscriptions', {
     method: 'POST',
     body: JSON.stringify({ subscription }),

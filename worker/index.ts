@@ -160,7 +160,7 @@ async function routeApi(request: Request, env: Env, ctx: ExecutionContext): Prom
     await routeExpensesApi(path, method, request, env, user) ||
     await routePetsApi(path, method, request, url, env, user) ||
     await routeEventsApi(path, method, request, env, ctx, user) ||
-    await routeNotificationsApi(path, method, request, env, user) ||
+    await routeNotificationsApi(path, method, request, url, env, user) ||
     await routePostsApi(path, method, request, url, env, user) ||
     await routePushApi(path, method, request, env, user) ||
     await routeBackupApi(path, method, env, user);
@@ -317,8 +317,14 @@ async function routeEventsApi(path: string, method: string, request: Request, en
   return null;
 }
 
-async function routeNotificationsApi(path: string, method: string, request: Request, env: Env, user: CurrentUser): Promise<Response | null> {
-  if (path === '/notifications' && method === 'GET') return json({ notifications: await listNotifications(env, user) });
+async function routeNotificationsApi(path: string, method: string, request: Request, url: URL, env: Env, user: CurrentUser): Promise<Response | null> {
+  if (path === '/notifications' && method === 'GET') {
+    return json({ notifications: await listNotifications(env, user, {
+      limit: Number(url.searchParams.get('limit') || 100),
+      offset: Number(url.searchParams.get('offset') || 0),
+      filter: url.searchParams.get('filter') || 'all',
+    }) });
+  }
   if (path === '/notifications/latest' && method === 'GET') return json({ notification: await latestNotification(env, user) });
   if (path === '/notifications' && method === 'POST') return addNotificationRoute(request, env, user);
   if (path.match(/^\/notifications\/[^/]+\/read$/) && method === 'PATCH') return markNotificationRead(env, user, path.split('/')[2]);
@@ -953,7 +959,12 @@ async function submitDonationRoute(request: Request, env: Env, user: CurrentUser
     INSERT INTO payments (id, family_id, month, amount, proof_key, proof_url, status, type, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, '', 'analyzing', 'doacao', ?, ?)
   `).bind(id, targetFamilyId, timestamp.slice(0, 7), amount, proofKey, timestamp, timestamp).run();
-  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${amount.toFixed(2)} aguarda análise.`);
+  await insertNotification(env, 'admins', 'Nova Doação', `Uma doação de R$ ${amount.toFixed(2)} aguarda análise.`, {
+    type: 'payment',
+    entityType: 'payment',
+    entityId: id,
+    data: { paymentId: id, familyId: targetFamilyId },
+  });
   await publishRealtime(env, 'payments', 'all', { paymentId: id, familyId: targetFamilyId, action: 'created' });
   return json({ payment: (await listPayments(env, targetFamilyId, { includeProofs: true })).find((p) => p.id === id) });
 }
@@ -1013,7 +1024,12 @@ async function uploadProofRoute(request: Request, env: Env, user: CurrentUser, p
   const key = await putFile(env, 'proofs', file);
   await env.DB.prepare('UPDATE payments SET proof_key = ?, proof_url = "", status = "analyzing", updated_at = ? WHERE id = ?')
     .bind(key, now(), paymentId).run();
-  await insertNotification(env, 'admins', 'Comprovante Recebido', 'Um novo comprovante foi anexado e aguarda avaliação.');
+  await insertNotification(env, 'admins', 'Comprovante Recebido', 'Um novo comprovante foi anexado e aguarda avaliação.', {
+    type: 'payment',
+    entityType: 'payment',
+    entityId: paymentId,
+    data: { paymentId, familyId: payment.family_id },
+  });
   await publishRealtime(env, 'payments', 'all', { paymentId, familyId: payment.family_id, action: 'proof-uploaded' });
   return json({ ok: true });
 }
@@ -1233,26 +1249,41 @@ async function markEventRead(env: Env, user: CurrentUser, eventId: string): Prom
   return json({ ok: true });
 }
 
-async function listNotifications(env: Env, user: CurrentUser): Promise<any[]> {
+async function listNotifications(env: Env, user: CurrentUser, options: { limit?: number; offset?: number; filter?: string } = {}): Promise<any[]> {
   const targets = user.role === 'admin' ? [user.uid, 'all', 'admins'] : [user.uid, 'all'];
   const placeholders = targets.map(() => '?').join(',');
+  const limit = Math.max(1, Math.min(Number(options.limit || 100), 200));
+  const offset = Math.max(0, Number(options.offset || 0));
+  const filterClause = notificationFilterClause(options.filter || 'all', user);
   const res = await env.DB.prepare(`
-    SELECT n.*,
-      CASE
-        WHEN n.user_id IN ('all', 'admins') THEN CASE WHEN nr.user_id IS NULL THEN 0 ELSE 1 END
-        ELSE n.is_read
-      END AS computed_is_read
-    FROM notifications n
-    LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
-    WHERE n.user_id IN (${placeholders})
-    ORDER BY n.created_at DESC
-    LIMIT 100
-  `).bind(user.uid, ...targets).all<any>();
+    SELECT *
+    FROM (
+      SELECT n.*,
+        CASE
+          WHEN n.user_id IN ('all', 'admins') THEN CASE WHEN nr.user_id IS NULL THEN 0 ELSE 1 END
+          ELSE n.is_read
+        END AS computed_is_read
+      FROM notifications n
+      LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
+      WHERE n.user_id IN (${placeholders})
+    )
+    WHERE ${filterClause}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).bind(user.uid, ...targets, limit, offset).all<any>();
   return (res.results || []).map(rowToNotification);
 }
 
 async function latestNotification(env: Env, user: CurrentUser): Promise<any | null> {
   return (await listNotifications(env, user))[0] || null;
+}
+
+function notificationFilterClause(filter: string, user: CurrentUser): string {
+  if (filter === 'unread') return 'computed_is_read = 0';
+  if (filter === 'social') return "type IN ('post_comment', 'post_like', 'mention')";
+  if (filter === 'payments') return "type = 'payment'";
+  if (filter === 'admin' && user.role === 'admin') return "user_id = 'admins'";
+  return '1 = 1';
 }
 
 function rowToNotification(row: any): any {
