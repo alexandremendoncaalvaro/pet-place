@@ -30,18 +30,18 @@
     "smoke:prod": "node tools/smoke.mjs https://pet-place.pages.dev"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.14",
+    "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^6.0.1",
     "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^1.14.0",
     "motion": "^12.23.24",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "tailwind-merge": "^3.5.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwind-merge": "^3.6.0",
     "textarea-caret": "^3.1.0",
-    "vite": "^8.0.10"
+    "vite": "^8.0.12"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260503.1",
@@ -54,7 +54,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
-    "vite": "^8.0.10",
+    "vite": "^8.0.12",
     "vitest": "^4.1.5",
     "wrangler": "^4.87.0"
   },
